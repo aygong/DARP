@@ -36,9 +36,11 @@ parameters = [['0', 'a', 2, 16, 480, 3, 30],
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--aim', type=str, default='time')
     parser.add_argument('--index', type=int, default=8)
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--mask', type=str, default='off')
     parser.add_argument('--d_model', type=int, default=128)
     parser.add_argument('--num_layers', type=int, default=3)
     parser.add_argument('--num_heads', type=int, default=8)
@@ -107,7 +109,10 @@ def main():
         device = torch.device("cpu")
 
     input_seq_len = (2 * max_vehicle_capacity + 1) + num_users + 1
-    target_seq_len = num_users + 1
+    if args.aim == 'user':
+        target_seq_len = num_users + 1
+    else:
+        target_seq_len = 1
 
     model = Transformer(
         num_vehicles=num_vehicles,
@@ -128,13 +133,16 @@ def main():
     if cuda_available:
         model.cuda()
 
-    criterion = nn.CrossEntropyLoss()
+    if args.aim == 'user':
+        criterion = nn.CrossEntropyLoss()
+    else:
+        criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
     epochs = args.epochs
-    train_accuracy = np.zeros(epochs)
-    valid_accuracy = np.zeros(epochs)
+    train_performance = np.zeros(epochs)
+    valid_performance = np.zeros(epochs)
     model_validation = True
 
     for epoch in range(epochs):
@@ -147,18 +155,23 @@ def main():
         for _, (states, actions) in enumerate(train_data):
             iters += 1
             _, _, _, mask_info = states
-            actions = actions.to(device)
+            if args.aim == 'user':
+                actions = actions.to(device)
+            else:
+                actions = actions.float().unsqueeze(dim=-1).to(device)
 
-            mask = torch.zeros(len(actions), input_seq_len)
-            for user_id in range(num_users):
-                for example_id in range(len(actions)):
-                    mask[example_id][user_id - num_users] = mask_info[user_id][example_id]
-            mask = mask.to(device)
+            if args.mask == 'on':
+                mask = torch.zeros(len(actions), input_seq_len)
+                for user_id in range(num_users):
+                    for example_id in range(len(actions)):
+                        mask[example_id][user_id - num_users] = mask_info[user_id][example_id]
+                mask = mask.to(device)
+            else:
+                mask = None
 
             optimizer.zero_grad()
 
             outputs = model(states, device, mask)
-
             loss = criterion(outputs, actions)
 
             loss.backward()
@@ -168,19 +181,25 @@ def main():
 
             scheduler.step(running_loss)
 
-            _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
-            train_measure = (predicted == actions).sum().item() / actions.size(0)
+            if args.aim == 'user':
+                _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
+                train_measure = (predicted == actions).sum().item() / actions.size(0)
+                if iters % 20 == 0:
+                    print('Epoch: {}.'.format(epoch),
+                          'Iteration: {}.'.format(iters),
+                          'Training loss: {:.4f}.'.format(loss.item()),
+                          'Training accuracy: {:.4f}.'.format(train_measure)
+                          )
+                train_performance[epoch] = train_performance[epoch] + train_measure
+            else:
+                if iters % 20 == 0:
+                    print('Epoch: {}.'.format(epoch),
+                          'Iteration: {}.'.format(iters),
+                          'Training loss: {:.4f}.'.format(loss.item()),
+                          )
+                train_performance[epoch] = train_performance[epoch] + loss.item()
 
-            if iters % 20 == 0:
-                print('Epoch: {}.'.format(epoch),
-                      'Iteration: {}.'.format(iters),
-                      'Training loss: {:.4f}.'.format(loss.item()),
-                      'Training accuracy: {:.4f}.'.format(train_measure)
-                      )
-
-            train_accuracy[epoch] += train_measure
-
-        train_accuracy[epoch] /= (iters + 1)
+        train_performance[epoch] /= (iters + 1)
 
         if model_validation:
             # Validation
@@ -193,22 +212,36 @@ def main():
                 # Loop over batches in an epoch using valid_data
                 for _, (states, actions) in enumerate(valid_data):
                     _, _, _, mask_info = states
-                    actions = actions.to(device)
+                    if args.aim == 'user':
+                        actions = actions.to(device)
+                    else:
+                        actions = actions.float().unsqueeze(dim=-1).to(device)
 
-                    mask = torch.zeros(len(actions), input_seq_len)
-                    for user_id in range(num_users):
-                        for example_id in range(len(actions)):
-                            mask[example_id][user_id - num_users] = mask_info[user_id][example_id]
-                    mask = mask.to(device)
+                    if mask == 'on':
+                        mask = torch.zeros(len(actions), input_seq_len)
+                        for user_id in range(num_users):
+                            for example_id in range(len(actions)):
+                                mask[example_id][user_id - num_users] = mask_info[user_id][example_id]
+                        mask = mask.to(device)
+                    else:
+                        mask = None
 
                     outputs = model(states, device, mask)
-                    _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
+                    loss = criterion(outputs, actions)
 
-                    valid_measure[0] += (predicted == actions).sum().item()
-                    valid_measure[1] += actions.size(0)
+                    if args.aim == 'user':
+                        _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
+                        valid_measure[0] += (predicted == actions).sum().item()
+                        valid_measure[1] += actions.size(0)
+                    else:
+                        valid_measure[0] = valid_measure[0] + loss.item()
+                        valid_measure[1] += 1
 
-            valid_accuracy[epoch] = valid_measure[0] / valid_measure[1]
-            print('Validation accuracy: {:.4f}.'.format(valid_accuracy[epoch]))
+            valid_performance[epoch] = valid_measure[0] / valid_measure[1]
+            if args.aim == 'user':
+                print('Validation accuracy: {:.4f}.'.format(valid_performance[epoch]))
+            else:
+                print('Validation loss: {:.4f}.'.format(valid_performance[epoch]))
 
         torch.save({
             'epoch': epoch,
@@ -222,19 +255,24 @@ def main():
         print('-> Execution time for Epoch {}: {:.4f} seconds.'.format(epoch, exec_time))
         print('-> Estimated execution time remaining: {:.4f} seconds.\n'.format(exec_time * (epochs - epoch - 1)))
 
-    file_name = 'accuracy-' + str(num_vehicles) + '-' + str(num_users)
-
     fig, ax = plt.subplots()
-    ax.plot(np.arange(epochs), train_accuracy, label="Train accuracy")
-    ax.plot(np.arange(epochs), valid_accuracy, label="Validation accuracy")
+    if args.aim == 'user':
+        file_name = 'accuracy-' + str(num_vehicles) + '-' + str(num_users)
+        ax.plot(np.arange(epochs), train_performance, label="Train accuracy")
+        ax.plot(np.arange(epochs), valid_performance, label="Validation accuracy")
+        ax.set_ylabel('Accuracy')
+    else:
+        file_name = 'loss-' + str(num_vehicles) + '-' + str(num_users)
+        ax.plot(np.arange(epochs), train_performance, label="Train loss")
+        ax.plot(np.arange(epochs), valid_performance, label="Validation loss")
+        ax.set_ylabel('Loss')
     ax.legend()
     ax.set_xlabel('Epoch')
-    ax.set_ylabel('Accuracy')
     plt.savefig(path_plot + file_name + '.pdf')
 
     with open(path_plot + file_name + '.npy', 'wb') as file:
-        np.save(file, train_accuracy)
-        np.save(file, valid_accuracy)
+        np.save(file, train_performance)
+        np.save(file, valid_performance)
 
 
 if __name__ == '__main__':

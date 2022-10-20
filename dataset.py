@@ -30,6 +30,9 @@ parameters = [['0', 'a', 2, 16, 480, 3, 30],
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--aim', type=str, default='time')
+    parser.add_argument('--num_subsets', type=int, default=1)
+    parser.add_argument('--num_instances', type=int, default=1500)
     parser.add_argument('--index', type=int, default=8)
 
     args = parser.parse_args()
@@ -97,11 +100,11 @@ def main():
 
     data = []
     num_dataset = 1
-    num_pair = 0
+    num_instance = 0
 
     with open(path, 'r') as file:
         for pair in file:
-            num_pair += 1
+            num_instance += 1
             pair = json.loads(pair)
 
             num_vehicles = pair['instance'][0][0]
@@ -277,6 +280,9 @@ def main():
                         vehicle.next_free_time = max_route_duration
                         vehicle.coordinates = destination_depot_coordinates
 
+                    if args.aim == 'time':
+                        action = vehicle.schedule[ordinal]
+
                     vehicle.ordinal += 1
 
                     # if n == 1:
@@ -293,16 +299,16 @@ def main():
                 if num_finish == len(indices):
                     break
 
-            if len(data) > 50000:
+            if num_instance % args.num_instances == 0:
                 file = 'dataset-' + instance_name + '-' + str(num_dataset) + '.pt'
                 print('Save {}.\n'.format(file))
                 torch.save(data, path_dataset + file)
                 data = []
                 num_dataset += 1
-                if num_dataset > 1:
+                if num_dataset > args.num_subsets:
                     break
             else:
-                print(num_dataset, num_pair, sys.getsizeof(data), len(data), objective)
+                print(num_dataset, num_instance, sys.getsizeof(data), len(data), objective)
 
 
 if __name__ == '__main__':
