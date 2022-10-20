@@ -1,0 +1,1 @@
+This folder contains results saved by train.py.
