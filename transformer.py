@@ -262,12 +262,12 @@ class Transformer(nn.Module):
         self.embed_load = nn.Embedding(max_vehicle_capacity + 1, d_model)
         self.embed_status = nn.Embedding(3, d_model)
         self.embed_served_by = nn.Embedding(num_vehicles + 1, d_model)
-        self.embed_ride_time = nn.Embedding(480 * 10 + 1, d_model)
-        self.embed_time = nn.Embedding(1440 * 10 + 1, d_model)
+        self.embed_ride_time = nn.Embedding(max_route_duration + 1, d_model)
+        self.embed_time = nn.Embedding(1440 + 1, d_model)
 
         self.embed_vehicle_id = nn.Embedding(num_vehicles, d_model)
         self.embed_flag = nn.Embedding(3, d_model)
-        self.embed_distance = nn.Embedding((30 + max_vehicle_capacity) * 10 + 1, d_model)
+        self.embed_distance = nn.Embedding(30 + max_vehicle_capacity + 1, d_model)
 
         self.user_encoder = Encoder(
             input_seq_len=11+num_vehicles,
@@ -323,16 +323,16 @@ class Transformer(nn.Module):
             user_seq.append(self.embed_load(user_info[1].long().to(device)))
             user_seq.append(self.embed_status(user_info[2].long().to(device)))
             user_seq.append(self.embed_served_by(user_info[3].long().to(device)))
-            user_ride_time = (user_info[4] * 10).round()
+            user_ride_time = (user_info[4]).round()
             user_seq.append(self.embed_ride_time(user_ride_time.long().to(device)))
 
             # Shape: (batch_size, 2) -> Shape: (batch_size, d_model)
-            start_pickup = (user_info[5][:, 0] * 10).round()
-            end_pickup = (user_info[5][:, 1] * 10).round()
+            start_pickup = (user_info[5][:, 0]).round()
+            end_pickup = (user_info[5][:, 1]).round()
             user_seq.append(self.embed_time(start_pickup.long().to(device)))
             user_seq.append(self.embed_time(end_pickup.long().to(device)))
-            start_dropoff = (user_info[6][:, 0] * 10).round()
-            end_dropoff = (user_info[6][:, 1] * 10).round()
+            start_dropoff = (user_info[6][:, 0]).round()
+            end_dropoff = (user_info[6][:, 1]).round()
             user_seq.append(self.embed_time(start_dropoff.long().to(device)))
             user_seq.append(self.embed_time(end_dropoff.long().to(device)))
 
@@ -340,7 +340,7 @@ class Transformer(nn.Module):
             user_seq.append(self.embed_vehicle_id(user_info[7].long().to(device)))
             user_seq.append(self.embed_flag(user_info[8].long().to(device)))
             for k in range(1, self.num_vehicles+1):
-                distance = (user_info[8+k] * 10).round()
+                distance = (user_info[8+k]).round()
                 user_seq.append(self.embed_distance(distance.long().to(device)))
 
             user_seq = self.user_encoder(torch.stack(user_seq).permute(1, 0, 2))

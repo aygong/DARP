@@ -231,7 +231,7 @@ def main():
 
     fig, ax = plt.subplots()
     file_name = 'accuracy-' + str(num_vehicles) + '-' + str(num_users)
-    ax.plot(np.arange(epochs), train_performance, label="Train accuracy")
+    ax.plot(np.arange(epochs), train_performance, label="Training accuracy")
     ax.plot(np.arange(epochs), valid_performance, label="Validation accuracy")
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Accuracy')
