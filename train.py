@@ -36,13 +36,12 @@ parameters = [['0', 'a', 2, 16, 480, 3, 30],
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--aim', type=str, default='time')
     parser.add_argument('--index', type=int, default=8)
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--mask', type=str, default='off')
     parser.add_argument('--d_model', type=int, default=128)
-    parser.add_argument('--num_layers', type=int, default=3)
+    parser.add_argument('--num_layers', type=int, default=4)
     parser.add_argument('--num_heads', type=int, default=8)
     parser.add_argument('--d_k', type=int, default=64)
     parser.add_argument('--d_v', type=int, default=64)
@@ -85,7 +84,7 @@ def main():
     random.seed(0)
 
     indices = list(range(data_size))
-    split = int(np.floor(0.05 * data_size))
+    split = int(np.floor(0.02 * data_size))
     train_indices, valid_indices = indices[split:], indices[:split]
     print('The size of training set: {}.'.format(len(train_indices)),
           'The size of validation set: {}.\n'.format(len(valid_indices)))
@@ -108,11 +107,8 @@ def main():
         print('CUDA is not available. Utilize CPUs for computation.\n')
         device = torch.device("cpu")
 
-    input_seq_len = (2 * max_vehicle_capacity + 1) + num_users + 1
-    if args.aim == 'user':
-        target_seq_len = num_users + 1
-    else:
-        target_seq_len = 1
+    input_seq_len = num_users
+    target_seq_len = num_users + 1
 
     model = Transformer(
         num_vehicles=num_vehicles,
@@ -133,10 +129,7 @@ def main():
     if cuda_available:
         model.cuda()
 
-    if args.aim == 'user':
-        criterion = nn.CrossEntropyLoss()
-    else:
-        criterion = nn.MSELoss()
+    criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
@@ -154,13 +147,11 @@ def main():
 
         for _, (states, actions) in enumerate(train_data):
             iters += 1
-            _, _, _, mask_info = states
-            if args.aim == 'user':
-                actions = actions.to(device)
-            else:
-                actions = actions.float().unsqueeze(dim=-1).to(device)
+            _, mask_info = states
+            actions = actions.to(device)
 
             if args.mask == 'on':
+                # print('Use mask in training.')
                 mask = torch.zeros(len(actions), input_seq_len)
                 for user_id in range(num_users):
                     for example_id in range(len(actions)):
@@ -181,23 +172,15 @@ def main():
 
             scheduler.step(running_loss)
 
-            if args.aim == 'user':
-                _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
-                train_measure = (predicted == actions).sum().item() / actions.size(0)
-                if iters % 20 == 0:
-                    print('Epoch: {}.'.format(epoch),
-                          'Iteration: {}.'.format(iters),
-                          'Training loss: {:.4f}.'.format(loss.item()),
-                          'Training accuracy: {:.4f}.'.format(train_measure)
-                          )
-                train_performance[epoch] = train_performance[epoch] + train_measure
-            else:
-                if iters % 20 == 0:
-                    print('Epoch: {}.'.format(epoch),
-                          'Iteration: {}.'.format(iters),
-                          'Training loss: {:.4f}.'.format(loss.item()),
-                          )
-                train_performance[epoch] = train_performance[epoch] + loss.item()
+            _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
+            train_measure = (predicted == actions).sum().item() / actions.size(0)
+            if iters % 20 == 0:
+                print('Epoch: {}.'.format(epoch),
+                      'Iteration: {}.'.format(iters),
+                      'Training loss: {:.4f}.'.format(loss.item()),
+                      'Training accuracy: {:.4f}.'.format(train_measure)
+                      )
+            train_performance[epoch] = train_performance[epoch] + train_measure
 
         train_performance[epoch] /= (iters + 1)
 
@@ -211,13 +194,11 @@ def main():
 
                 # Loop over batches in an epoch using valid_data
                 for _, (states, actions) in enumerate(valid_data):
-                    _, _, _, mask_info = states
-                    if args.aim == 'user':
-                        actions = actions.to(device)
-                    else:
-                        actions = actions.float().unsqueeze(dim=-1).to(device)
+                    _, mask_info = states
+                    actions = actions.to(device)
 
-                    if mask == 'on':
+                    if args.mask == 'on':
+                        # print('Use mask in validation.')
                         mask = torch.zeros(len(actions), input_seq_len)
                         for user_id in range(num_users):
                             for example_id in range(len(actions)):
@@ -229,19 +210,12 @@ def main():
                     outputs = model(states, device, mask)
                     loss = criterion(outputs, actions)
 
-                    if args.aim == 'user':
-                        _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
-                        valid_measure[0] += (predicted == actions).sum().item()
-                        valid_measure[1] += actions.size(0)
-                    else:
-                        valid_measure[0] = valid_measure[0] + loss.item()
-                        valid_measure[1] += 1
+                    _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
+                    valid_measure[0] += (predicted == actions).sum().item()
+                    valid_measure[1] += actions.size(0)
 
             valid_performance[epoch] = valid_measure[0] / valid_measure[1]
-            if args.aim == 'user':
-                print('Validation accuracy: {:.4f}.'.format(valid_performance[epoch]))
-            else:
-                print('Validation loss: {:.4f}.'.format(valid_performance[epoch]))
+            print('Validation accuracy: {:.4f}.'.format(valid_performance[epoch]))
 
         torch.save({
             'epoch': epoch,
@@ -256,23 +230,18 @@ def main():
         print('-> Estimated execution time remaining: {:.4f} seconds.\n'.format(exec_time * (epochs - epoch - 1)))
 
     fig, ax = plt.subplots()
-    if args.aim == 'user':
-        file_name = 'accuracy-' + str(num_vehicles) + '-' + str(num_users)
-        ax.plot(np.arange(epochs), train_performance, label="Train accuracy")
-        ax.plot(np.arange(epochs), valid_performance, label="Validation accuracy")
-        ax.set_ylabel('Accuracy')
-    else:
-        file_name = 'loss-' + str(num_vehicles) + '-' + str(num_users)
-        ax.plot(np.arange(epochs), train_performance, label="Train loss")
-        ax.plot(np.arange(epochs), valid_performance, label="Validation loss")
-        ax.set_ylabel('Loss')
-    ax.legend()
+    file_name = 'accuracy-' + str(num_vehicles) + '-' + str(num_users)
+    ax.plot(np.arange(epochs), train_performance, label="Train accuracy")
+    ax.plot(np.arange(epochs), valid_performance, label="Validation accuracy")
     ax.set_xlabel('Epoch')
+    ax.set_ylabel('Accuracy')
+    # ax.set(ylim=(0, 1))
+    ax.legend()
     plt.savefig(path_plot + file_name + '.pdf')
 
     with open(path_plot + file_name + '.npy', 'wb') as file:
-        np.save(file, train_performance)
-        np.save(file, valid_performance)
+        np.save(file, train_performance)  # noqa
+        np.save(file, valid_performance)  # noqa
 
 
 if __name__ == '__main__':
