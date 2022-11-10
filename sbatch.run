@@ -1,0 +1,17 @@
+#!/bin/bash
+#SBATCH --nodes 1
+#SBATCH --ntasks 1
+#SBATCH --time 24:00:00
+#SBATCH --mem 16G
+#SBATCH --partition=gpu
+#SBATCH --account=master
+#SBATCH --job-name=darp
+#SBATCH --gres=gpu:2
+#SBATCH --qos=gpu
+#SBATCH --chdir /home/<gaspar>/
+
+
+source venv/bin/activate
+cd <directory>
+python dataset.py --num_subsets 20 --num_instances 500 --index 8
+python train.py --index 8 --batch_size 2048 --epochs 200 --mask off --num_layers 4

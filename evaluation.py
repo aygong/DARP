@@ -7,7 +7,13 @@ import sys
 import argparse
 import shutil
 
+from torch.utils.data import ConcatDataset, SubsetRandomSampler, DataLoader
+from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 import torch
+from torch import nn
+
+from transformer import Transformer
+import torch.nn.functional as f
 
 parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
               ['1', 'a', 2, 20, 600, 3, 30],  # 1
@@ -30,9 +36,16 @@ parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--num_subsets', type=int, default=3)
-    parser.add_argument('--num_instances', type=int, default=500)
-    parser.add_argument('--index', type=int, default=0)
+    parser.add_argument('--num_instances', type=int, default=100)
+    parser.add_argument('--index', type=int, default=8)
+    parser.add_argument('--mask', type=str, default='off')
+    parser.add_argument('--d_model', type=int, default=128)
+    parser.add_argument('--num_layers', type=int, default=4)
+    parser.add_argument('--num_heads', type=int, default=8)
+    parser.add_argument('--d_k', type=int, default=64)
+    parser.add_argument('--d_v', type=int, default=64)
+    parser.add_argument('--d_ff', type=int, default=2048)
+    parser.add_argument('--dropout', type=float, default=0.1)
 
     args = parser.parse_args()
 
@@ -76,6 +89,9 @@ class Vehicle:
         self.user_ride_time = {}
         self.next_free_time = 0.0
         self.service_duration = 0
+        self.route_pred = [0]
+        self.schedule_pred = [0]
+        self.cost = 0.0
 
 
 def euclidean_distance(coord_start, coord_end):
@@ -88,8 +104,20 @@ def time_window_shift(time_window, time):
 
 def main():
     args = parse_arguments()
-    instance_name = parameters[args.index][1] + str(parameters[args.index][2]) + '-' + str(parameters[args.index][3])
-    path = './instance/' + instance_name + '-train.txt'
+    instance_type = parameters[args.index][1]
+    num_vehicles = parameters[args.index][2]
+    num_users = parameters[args.index][3]
+    max_route_duration = parameters[args.index][4]
+    max_vehicle_capacity = parameters[args.index][5]
+    max_ride_time = parameters[args.index][6]
+    print('Number of vehicles: {}.'.format(num_vehicles),
+          'Number of users: {}.'.format(num_users),
+          'Maximum route duration: {}.'.format(max_route_duration),
+          'Maximum vehicle capacity: {}.'.format(max_vehicle_capacity),
+          'Maximum ride time: {}.'.format(max_ride_time))
+
+    instance_name = instance_type + str(num_vehicles) + '-' + str(num_users)
+    path = './instance/' + instance_name + '-test.txt'
 
     nodes_to_users = {}
     for i in range(1, 2 * (parameters[args.index][3] + 1) - 1):
@@ -98,15 +126,45 @@ def main():
         else:
             nodes_to_users[i] = i - parameters[args.index][3]
 
-    path_dataset = './dataset/'
-    os.makedirs(path_dataset, exist_ok=True)
-    shutil.rmtree(path_dataset)
-    print("Directory {} has been removed successfully".format(path_dataset))
-    os.makedirs(path_dataset)
+    # Determine if your system supports CUDA
+    cuda_available = torch.cuda.is_available()
+    if cuda_available:
+        print('CUDA is available. Utilize GPUs for computation.\n')
+        device = torch.device("cuda")
+    else:
+        print('CUDA is not available. Utilize CPUs for computation.\n')
+        device = torch.device("cpu")
 
-    data = []
-    num_dataset = 1
+    input_seq_len = num_users
+
+    model = Transformer(
+        num_vehicles=num_vehicles,
+        num_users=num_users,
+        max_route_duration=max_route_duration,
+        max_vehicle_capacity=max_vehicle_capacity,
+        max_ride_time=max_ride_time,
+        input_seq_len=input_seq_len,
+        target_seq_len=num_users + 1,
+        d_model=args.d_model,
+        num_layers=args.num_layers,
+        num_heads=args.num_heads,
+        d_k=args.d_k,
+        d_v=args.d_v,
+        d_ff=args.d_ff,
+        dropout=args.dropout)
+
+    checkpoint = torch.load('./model/model-' + instance_name + '.model')
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+
+    if cuda_available:
+        model.cuda()
+
     num_instance = 0
+    obj_true = []
+    obj_pred = []
+    list_time_window = []
+    list_ride_time = []
 
     with open(path, 'r') as file:
         for pair in file:
@@ -119,6 +177,8 @@ def main():
             max_vehicle_capacity = pair['instance'][0][3]
             max_ride_time = pair['instance'][0][4]
             objective = pair['objective']
+
+            obj_true.append(objective)
 
             users = []
             for i in range(0, num_users):
@@ -150,7 +210,7 @@ def main():
 
             # for i in range(0, num_users):
             #     user = users[i]
-            #     print('User {}'.format(user.id),
+            #     print('User {}'.format(user.id + 1),
             #           'Pick-up Coordinates {}.'.format(user.pickup_coordinates),
             #           'Drop-off Coordinates {}.'.format(user.dropoff_coordinates),
             #           'Pick-up Time Window {}.'.format(user.pickup_time_window),
@@ -182,6 +242,9 @@ def main():
             #           'Schedule {}.'.format(vehicle.schedule),
             #           'Coordinates {}.'.format(vehicle.coordinates),
             #           'Free Capacity {}.'.format(vehicle.free_capacity))
+
+            num_time_window = 0
+            num_ride_time = 0
 
             while True:
                 next_free_times = [vehicle.next_free_time for vehicle in vehicles]
@@ -236,40 +299,48 @@ def main():
 
                     state = [users_info, mask_info]
 
-                    ordinal = vehicle.ordinal - 1
-                    if vehicle.route[ordinal] != 2 * num_users + 1:
-                        node = vehicle.route[ordinal]
-                        user = users[nodes_to_users[node] - 1]
-                        action = user.id
+                    state, _ = DataLoader([state, 0], batch_size=1)  # noqa
+                    outputs = model(state, device)
+                    _, prediction = torch.max(f.softmax(outputs, dim=1), 1)
+
+                    if prediction != num_users:
+                        user = users[prediction]
 
                         if user.id not in vehicle.user_ride_time.keys():
                             travel_time = euclidean_distance(vehicle.coordinates, user.pickup_coordinates)
+                            window_start = user.pickup_time_window[0]
                             vehicle.coordinates = user.pickup_coordinates
                             user.status = 1
                         else:
                             travel_time = euclidean_distance(vehicle.coordinates, user.dropoff_coordinates)
+                            window_start = user.dropoff_time_window[0]
                             vehicle.coordinates = user.dropoff_coordinates
                             user.status = 2
 
-                        ride_time = vehicle.schedule[ordinal] - vehicle.next_free_time
-                        if vehicle.route[ordinal - 1] != 0:
-                            if travel_time + vehicle.service_duration > ride_time + 1e-2:
-                                print(travel_time + vehicle.service_duration, ride_time)
-                                raise ValueError('The departure time is too early.')
+                        vehicle.cost += travel_time
+
+                        if vehicle.next_free_time + vehicle.service_duration + travel_time > window_start:
+                            ride_time = vehicle.service_duration + travel_time
+                            vehicle.next_free_time += ride_time
+                        else:
+                            ride_time = window_start - vehicle.next_free_time
+                            vehicle.next_free_time = window_start
 
                         for key in vehicle.user_ride_time:
                             vehicle.user_ride_time[key] += ride_time
                             user.ride_time += ride_time
                             if vehicle.user_ride_time[key] - users[key].service_duration > max_ride_time + 1e-6:
-                                print(vehicle.user_ride_time[key] - users[key].service_duration, max_ride_time)
-                                raise ValueError('The ride time of User {} is too long.'.format(user.id))
-
-                        vehicle.next_free_time = vehicle.schedule[ordinal]
+                                if user.id >= num_users / 2 or user.id != vehicle.route_pred[-1] - 1:
+                                    print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
+                                        user.id + 1, vehicle.user_ride_time[key] - users[key].service_duration, max_ride_time))
+                                    num_ride_time += 1
 
                         if user.id not in vehicle.user_ride_time.keys():
                             if vehicle.next_free_time < user.pickup_time_window[0] or \
                                     vehicle.next_free_time > user.pickup_time_window[1]:
-                                raise ValueError('The pick-up time window of User {} is broken.'.format(user.id))
+                                print('The pick-up time window of User {} is broken: {:.2f} not in [{}, {}].'.format(
+                                    user.id + 1, vehicle.next_free_time, user.pickup_time_window[0], user.pickup_time_window[1]))
+                                num_time_window += 1
                             vehicle.user_ride_time[user.id] = 0.0
                             user.ride_time = 0.0
                             vehicle.free_capacity -= user.load
@@ -277,7 +348,9 @@ def main():
                         else:
                             if vehicle.next_free_time < user.dropoff_time_window[0] or \
                                     vehicle.next_free_time > user.dropoff_time_window[1]:
-                                raise ValueError('The drop-off time window of User {} is broken.'.format(user.id))
+                                print('The drop-off time window of User {} is broken: {:.2f} not in [{}, {}].'.format(
+                                    user.id + 1, vehicle.next_free_time, user.dropoff_time_window[0], user.dropoff_time_window[1]))
+                                num_time_window += 1
                             del vehicle.user_ride_time[user.id]
                             user.ride_time = 0.0
                             vehicle.free_capacity += user.load
@@ -285,37 +358,47 @@ def main():
 
                         vehicle.service_duration = user.service_duration
                     else:
-                        action = num_users
+                        vehicle.cost += euclidean_distance(vehicle.coordinates, destination_depot_coordinates)
                         vehicle.next_free_time = max_route_duration
                         vehicle.coordinates = destination_depot_coordinates
                         vehicle.service_duration = 0
 
-                    vehicle.ordinal += 1
-
-                    # if n == 1:
-                    #     print('Time {}.'.format(time),
-                    #           'Vehicle {}.'.format(vehicle.id),
-                    #           'Action {}.'.format(action),
-                    #           'Free Capacity {}.'.format(vehicle.free_capacity),
-                    #           'User Ride Time {}.'.format(vehicle.user_ride_time),
-                    #           'Next Free Time {}.'.format(vehicle.next_free_time),
-                    #           'Coordinates {}.'.format(vehicle.coordinates))
-
-                    data.append([state, action])
+                    vehicle.route_pred.append(prediction.item() + 1)
+                    vehicle.schedule_pred.append(vehicle.next_free_time)
 
                 if num_finish == len(indices):
+                    for vehicle in vehicles:
+                        print('-> Vehicle {}'.format(vehicle.id))
+                        for index, node in enumerate(vehicle.route):
+                            if 0 < node < 2 * num_users + 1:
+                                vehicle.route[index] = nodes_to_users[node]
+
+                        ground_truth = zip(vehicle.route[1:-1], vehicle.schedule[1:-1])
+                        prediction = zip(vehicle.route_pred[1:-1], vehicle.schedule_pred[1:-1])
+                        print('Ground truth:', [f'({term[0]}, {term[1]:.2f})' for term in ground_truth])
+                        print('Prediction:', [f'({term[0]}, {term[1]:.2f})' for term in prediction])
+
+                    obj_pred.append(sum(vehicle.cost for vehicle in vehicles))
+                    list_time_window.append(num_time_window)
+                    list_ride_time.append(num_ride_time)
+
+                    print('-> Objective')
+                    print('Ground truth: {:.4f}.'.format(obj_true[-1]))
+                    print('Prediction: {:.4f}.\n'.format(obj_pred[-1]))
+
                     break
 
-            if num_instance % args.num_instances == 0:
-                file = 'dataset-' + instance_name + '-' + str(num_dataset) + '.pt'
-                print('Save {}.\n'.format(file))
-                torch.save(data, path_dataset + file)
-                data = []
-                num_dataset += 1
-                if num_dataset > args.num_subsets:
-                    break
-            else:
-                print(num_dataset, num_instance, sys.getsizeof(data), len(data), objective)
+            if num_instance >= args.num_instances:
+                break
+
+        print(obj_true[0], obj_pred[0], list_time_window[0], list_ride_time[0])
+        aver_true = sum(obj_true) / len(obj_true)
+        aver_pred = sum(obj_pred) / len(obj_pred)
+        print('Aver. Cost (Rist 2021): {:.4f}.'.format(aver_true))
+        print('Aver. Cost (predicted): {:.4f}.'.format(aver_pred))
+        print('Gap (%): {:.4f}.'.format((aver_true - aver_pred) / aver_true * 100))
+        print('# Time Window: {:.4f}.'.format(sum(list_time_window) / len(list_time_window)))
+        print('# Ride Time: {:.4f}.'.format(sum(list_ride_time) / len(list_ride_time)))
 
 
 if __name__ == '__main__':
