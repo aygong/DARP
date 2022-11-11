@@ -37,7 +37,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--num_instances', type=int, default=100)
-    parser.add_argument('--index', type=int, default=8)
+    parser.add_argument('--index', type=int, default=9)
     parser.add_argument('--mask', type=str, default='off')
     parser.add_argument('--d_model', type=int, default=128)
     parser.add_argument('--num_layers', type=int, default=4)
@@ -244,7 +244,7 @@ def main():
             #           'Free Capacity {}.'.format(vehicle.free_capacity))
 
             num_time_window = 0
-            num_ride_time = 0
+            num_ride_time = []
 
             while True:
                 next_free_times = [vehicle.next_free_time for vehicle in vehicles]
@@ -328,12 +328,12 @@ def main():
 
                         for key in vehicle.user_ride_time:
                             vehicle.user_ride_time[key] += ride_time
-                            user.ride_time += ride_time
-                            if vehicle.user_ride_time[key] - users[key].service_duration > max_ride_time + 1e-6:
-                                if user.id >= num_users / 2 or user.id != vehicle.route_pred[-1] - 1:
+                            users[key].ride_time += ride_time
+                            if users[key].ride_time - users[key].service_duration > max_ride_time + 1e-6:
+                                if users[key].id >= num_users / 2 or users[key].id + 1 != vehicle.route_pred[-1]:
                                     print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
-                                        user.id + 1, vehicle.user_ride_time[key] - users[key].service_duration, max_ride_time))
-                                    num_ride_time += 1
+                                        users[key].id + 1, users[key].ride_time - users[key].service_duration, max_ride_time))
+                                    num_ride_time.append(users[key].id + 1)
 
                         if user.id not in vehicle.user_ride_time.keys():
                             if vehicle.next_free_time < user.pickup_time_window[0] or \
@@ -342,7 +342,6 @@ def main():
                                     user.id + 1, vehicle.next_free_time, user.pickup_time_window[0], user.pickup_time_window[1]))
                                 num_time_window += 1
                             vehicle.user_ride_time[user.id] = 0.0
-                            user.ride_time = 0.0
                             vehicle.free_capacity -= user.load
                             user.served_by = vehicle.id
                         else:
@@ -352,10 +351,10 @@ def main():
                                     user.id + 1, vehicle.next_free_time, user.dropoff_time_window[0], user.dropoff_time_window[1]))
                                 num_time_window += 1
                             del vehicle.user_ride_time[user.id]
-                            user.ride_time = 0.0
                             vehicle.free_capacity += user.load
                             user.served_by = num_vehicles
 
+                        user.ride_time = 0.0
                         vehicle.service_duration = user.service_duration
                     else:
                         vehicle.cost += euclidean_distance(vehicle.coordinates, destination_depot_coordinates)
@@ -375,12 +374,15 @@ def main():
 
                         ground_truth = zip(vehicle.route[1:-1], vehicle.schedule[1:-1])
                         prediction = zip(vehicle.route_pred[1:-1], vehicle.schedule_pred[1:-1])
-                        print('Ground truth:', [f'({term[0]}, {term[1]:.2f})' for term in ground_truth])
-                        print('Prediction:', [f'({term[0]}, {term[1]:.2f})' for term in prediction])
+                        print('Ground truth:', [term[0] for term in ground_truth])
+                        print('Prediction:', [term[0] for term in prediction])
+                        # print('Ground truth:', [f'({term[0]}, {term[1]:.2f})' for term in ground_truth])
+                        # print('Prediction:', [f'({term[0]}, {term[1]:.2f})' for term in prediction])
 
                     obj_pred.append(sum(vehicle.cost for vehicle in vehicles))
                     list_time_window.append(num_time_window)
-                    list_ride_time.append(num_ride_time)
+                    print(num_ride_time, len(set(num_ride_time)))
+                    list_ride_time.append(len(set(num_ride_time)))
 
                     print('-> Objective')
                     print('Ground truth: {:.4f}.'.format(obj_true[-1]))
@@ -391,14 +393,19 @@ def main():
             if num_instance >= args.num_instances:
                 break
 
-        print(obj_true[0], obj_pred[0], list_time_window[0], list_ride_time[0])
+        print('Cost (Rist 2021): {:.2f}.'.format(obj_true[0]))
+        print('Cost (predicted): {:.2f}.'.format(obj_pred[0]))
+        print('Gap (%): {:.2f}.'.format((obj_true[0] - obj_pred[0]) / obj_true[0] * 100))
+        print('# Time Window: {}.'.format(list_time_window[0]))
+        print('# Ride Time: {}.'.format(list_ride_time[0]))
+
         aver_true = sum(obj_true) / len(obj_true)
         aver_pred = sum(obj_pred) / len(obj_pred)
-        print('Aver. Cost (Rist 2021): {:.4f}.'.format(aver_true))
-        print('Aver. Cost (predicted): {:.4f}.'.format(aver_pred))
-        print('Gap (%): {:.4f}.'.format((aver_true - aver_pred) / aver_true * 100))
-        print('# Time Window: {:.4f}.'.format(sum(list_time_window) / len(list_time_window)))
-        print('# Ride Time: {:.4f}.'.format(sum(list_ride_time) / len(list_ride_time)))
+        print('Aver. Cost (Rist 2021): {:.2f}.'.format(aver_true))
+        print('Aver. Cost (predicted): {:.2f}.'.format(aver_pred))
+        print('Gap (%): {:.2f}.'.format((aver_true - aver_pred) / aver_true * 100))
+        print('Aver. # Time Window: {:.2f}.'.format(sum(list_time_window) / len(list_time_window)))
+        print('Aver. # Ride Time: {:.2f}.'.format(sum(list_ride_time) / len(list_ride_time)))
 
 
 if __name__ == '__main__':

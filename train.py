@@ -36,7 +36,7 @@ parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--index', type=int, default=0)
+    parser.add_argument('--index', type=int, default=8)
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--mask', type=str, default='off')

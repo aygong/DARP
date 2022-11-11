@@ -32,7 +32,7 @@ def parse_arguments():
 
     parser.add_argument('--num_subsets', type=int, default=3)
     parser.add_argument('--num_instances', type=int, default=500)
-    parser.add_argument('--index', type=int, default=0)
+    parser.add_argument('--index', type=int, default=8)
 
     args = parser.parse_args()
 
@@ -259,10 +259,10 @@ def main():
 
                         for key in vehicle.user_ride_time:
                             vehicle.user_ride_time[key] += ride_time
-                            user.ride_time += ride_time
-                            if vehicle.user_ride_time[key] - users[key].service_duration > max_ride_time + 1e-6:
-                                print(vehicle.user_ride_time[key] - users[key].service_duration, max_ride_time)
-                                raise ValueError('The ride time of User {} is too long.'.format(user.id))
+                            users[key].ride_time += ride_time
+                            if users[key].ride_time - users[key].service_duration > max_ride_time + 1e-6:
+                                print(users[key].ride_time - users[key].service_duration, max_ride_time)
+                                raise ValueError('The ride time of User {} is too long.'.format(users[key].id))
 
                         vehicle.next_free_time = vehicle.schedule[ordinal]
 
@@ -271,7 +271,6 @@ def main():
                                     vehicle.next_free_time > user.pickup_time_window[1]:
                                 raise ValueError('The pick-up time window of User {} is broken.'.format(user.id))
                             vehicle.user_ride_time[user.id] = 0.0
-                            user.ride_time = 0.0
                             vehicle.free_capacity -= user.load
                             user.served_by = vehicle.id
                         else:
@@ -279,10 +278,10 @@ def main():
                                     vehicle.next_free_time > user.dropoff_time_window[1]:
                                 raise ValueError('The drop-off time window of User {} is broken.'.format(user.id))
                             del vehicle.user_ride_time[user.id]
-                            user.ride_time = 0.0
                             vehicle.free_capacity += user.load
                             user.served_by = num_vehicles
 
+                        user.ride_time = 0.0
                         vehicle.service_duration = user.service_duration
                     else:
                         action = num_users
