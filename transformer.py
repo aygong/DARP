@@ -263,7 +263,7 @@ class Transformer(nn.Module):
         self.embed_status = nn.Embedding(3, d_model)
         self.embed_served_by = nn.Embedding(num_vehicles + 1, d_model)
         self.embed_ride_time = nn.Embedding(max_route_duration + 1, d_model)
-        self.embed_time = nn.Embedding(1440 + 1, d_model)
+        self.embed_time = nn.Embedding(max_route_duration + 1, d_model)
 
         self.embed_vehicle_id = nn.Embedding(num_vehicles, d_model)
         self.embed_flag = nn.Embedding(3, d_model)

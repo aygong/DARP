@@ -15,6 +15,7 @@ from torch import nn
 from transformer import Transformer
 import torch.nn.functional as f
 
+
 parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
               ['1', 'a', 2, 20, 600, 3, 30],  # 1
               ['2', 'a', 2, 24, 720, 3, 30],  # 2
@@ -79,8 +80,8 @@ def main():
     path_model = './model/'
     os.makedirs(path_model, exist_ok=True)
 
-    path_plot = './plot/'
-    os.makedirs(path_plot, exist_ok=True)
+    path_result = './result/'
+    os.makedirs(path_result, exist_ok=True)
 
     torch.manual_seed(0)
     random.seed(0)
@@ -110,7 +111,7 @@ def main():
         device = torch.device("cpu")
 
     input_seq_len = num_users
-    target_seq_len = num_users + 1
+    target_seq_len = num_users + 2
 
     model = Transformer(
         num_vehicles=num_vehicles,
@@ -231,7 +232,7 @@ def main():
         print('-> Execution time for Epoch {}: {:.4f} seconds.'.format(epoch, exec_time))
         print('-> Estimated execution time remaining: {:.4f} seconds.\n'.format(exec_time * (epochs - epoch - 1)))
 
-        with open(path_plot + 'training_log.txt', 'a+') as file:
+        with open(path_result + 'training_log.txt', 'a+') as file:
             json.dump({
                 'epoch': epoch,
                 'execution time': exec_time / 3600,
@@ -247,9 +248,9 @@ def main():
     ax.set_ylabel('Accuracy')
     ax.set(ylim=(0, 1))
     ax.legend()
-    plt.savefig(path_plot + file_name + '.pdf')
+    plt.savefig(path_result + file_name + '.pdf')
 
-    with open(path_plot + file_name + '.npy', 'wb') as file:
+    with open(path_result + file_name + '.npy', 'wb') as file:
         np.save(file, train_performance)  # noqa
         np.save(file, valid_performance)  # noqa
 
