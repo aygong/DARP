@@ -38,6 +38,7 @@ def parse_arguments():
 
     parser.add_argument('--num_instances', type=int, default=100)
     parser.add_argument('--index', type=int, default=8)
+    parser.add_argument('--wait_time', type=int, default=7)
     parser.add_argument('--mask', type=str, default='off')
     parser.add_argument('--d_model', type=int, default=128)
     parser.add_argument('--num_layers', type=int, default=4)
@@ -46,7 +47,6 @@ def parse_arguments():
     parser.add_argument('--d_v', type=int, default=64)
     parser.add_argument('--d_ff', type=int, default=2048)
     parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--wait_time', type=int, default=5)
 
     args = parser.parse_args()
 
@@ -165,7 +165,7 @@ def main():
         d_ff=args.d_ff,
         dropout=args.dropout)
 
-    checkpoint = torch.load('./model/model-' + instance_name + '.model')
+    checkpoint = torch.load('./model/model-' + instance_name + '-' + str(args.wait_time) + '.model')
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
@@ -333,6 +333,9 @@ def main():
                     mask = torch.Tensor(mask_info + [1, 1]).to(device)
                     outputs = model(state, device).masked_fill(mask == 0, -1e6)
                     _, prediction = torch.max(f.softmax(outputs, dim=1), 1)
+                    # if n == 0:
+                    #     mask = [0 if user.flag == 2 else 1 for user in users] + [1, 1]
+                    #     print(mask, prediction, mask[prediction])
 
                     if prediction == num_users + 1:
                         vehicle.free_time += args.wait_time
@@ -349,7 +352,7 @@ def main():
                                 vehicle.ride_time[user.id] = 0.0
                             else:
                                 if user.ride_time - user.duration > max_ride_time + 1e-2:
-                                    if user.id > num_users / 2 or user.id + 1 != vehicle.pred_route[-1]:
+                                    if user.id > num_users / 2 or vehicle.pred_route[-2] != vehicle.pred_route[-1]:
                                         print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
                                             user.id, user.ride_time - user.duration, max_ride_time))
                                         break_ride_time.append(user.id)

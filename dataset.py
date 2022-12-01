@@ -266,6 +266,23 @@ def main():
 
                     state = [users_info, mask_info]
 
+                    # if vehicle.free_time + args.wait_time < vehicle.schedule[vehicle.ordinal]:
+                    #     action = num_users + 1
+                    # else:
+                    #     if vehicle.route[vehicle.ordinal + 1] != 2 * num_users + 1:
+                    #         node = vehicle.route[vehicle.ordinal + 1]
+                    #         user = users[nodes_to_users[node] - 1]
+                    #         action = user.id
+                    #     else:
+                    #         action = num_users
+
+                    # if n == 1:
+                    #     mask = [0 if user.flag == 2 else 1 for user in users] + [1, 1]
+                    #     print(mask, action, mask[action])
+                    # mask = [0 if user.flag == 2 else 1 for user in users] + [1, 1]
+                    # if mask[action] != 1:
+                    #     raise ValueError(mask, action, mask[action])
+
                     if vehicle.free_time + args.wait_time < vehicle.schedule[vehicle.ordinal]:
                         action = num_users + 1
 

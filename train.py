@@ -48,6 +48,7 @@ def parse_arguments():
     parser.add_argument('--d_v', type=int, default=64)
     parser.add_argument('--d_ff', type=int, default=2048)
     parser.add_argument('--dropout', type=float, default=0.1)
+    parser.add_argument('--wait_time', type=int, default=5)
 
     args = parser.parse_args()
 
@@ -67,6 +68,7 @@ def main():
           'Maximum route duration: {}.'.format(max_route_duration),
           'Maximum vehicle capacity: {}.'.format(max_vehicle_capacity),
           'Maximum ride time: {}.'.format(max_ride_time))
+
     instance_name = instance_type + str(num_vehicles) + '-' + str(num_users)
 
     path_dataset = ['./dataset/' + file for file in os.listdir('./dataset')]
@@ -225,7 +227,7 @@ def main():
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': criterion,
-        }, './model/' + 'model-' + instance_name + '.model')
+        }, './model/' + 'model-' + instance_name + '-' + str(args.wait_time) + '.model')
 
         end = time.time()
         exec_time = end - start
@@ -241,7 +243,7 @@ def main():
             file.write("\n")
 
     fig, ax = plt.subplots()
-    file_name = 'accuracy-' + instance_name
+    file_name = 'accuracy-' + instance_name + '-' + str(args.wait_time)
     ax.plot(np.arange(epochs), train_performance, label="Training accuracy")
     ax.plot(np.arange(epochs), valid_performance, label="Validation accuracy")
     ax.set_xlabel('Epoch')
