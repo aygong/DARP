@@ -78,6 +78,9 @@ class Vehicle:
         self.free_time = 0.0
         self.duration = 0
 
+        #new feature
+        self.speed = 0
+
 
 def euclidean_distance(coord_start, coord_end):
     return math.sqrt((coord_start[0] - coord_end[0]) ** 2 + (coord_start[1] - coord_end[1]) ** 2)
