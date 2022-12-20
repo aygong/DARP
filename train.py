@@ -7,12 +7,13 @@ import random
 import json
 
 from torch.utils.data import ConcatDataset, SubsetRandomSampler, DataLoader
-from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch
 from torch import nn
 
 from transformer import Transformer
 import torch.nn.functional as f
+
 
 parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
               ['1', 'a', 2, 20, 600, 3, 30],  # 1
@@ -38,7 +39,7 @@ def parse_arguments():
     parser.add_argument('--train_set', type=int, default=1)
     parser.add_argument('--index', type=int, default=8)
     parser.add_argument('--batch_size', type=int, default=256)
-    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--d_model', type=int, default=128)
     parser.add_argument('--num_layers', type=int, default=4)
     parser.add_argument('--num_heads', type=int, default=8)
