@@ -36,8 +36,8 @@ parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--train_set', type=int, default=1)
-    parser.add_argument('--index', type=int, default=8)
+    parser.add_argument('--train_index', type=int, default=8)
+    parser.add_argument('--wait_time', type=int, default=7)
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--d_model', type=int, default=128)
@@ -47,7 +47,6 @@ def parse_arguments():
     parser.add_argument('--d_v', type=int, default=64)
     parser.add_argument('--d_ff', type=int, default=2048)
     parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--wait_time', type=int, default=7)
 
     args = parser.parse_args()
 
@@ -56,19 +55,20 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
-    instance_type = parameters[args.index][1]
-    num_vehicles = parameters[args.index][2]
-    num_users = parameters[args.index][3]
-    max_route_duration = parameters[args.index][4]
-    max_vehicle_capacity = parameters[args.index][5]
-    max_ride_time = parameters[args.index][6]
-    print('Number of vehicles: {}.'.format(num_vehicles),
-          'Number of users: {}.'.format(num_users),
-          'Maximum route duration: {}.'.format(max_route_duration),
-          'Maximum vehicle capacity: {}.'.format(max_vehicle_capacity),
-          'Maximum ride time: {}.'.format(max_ride_time))
 
-    instance_name = instance_type + str(num_vehicles) + '-' + str(num_users)
+    train_type = parameters[args.train_index][1]
+    train_K = parameters[args.train_index][2]
+    train_N = parameters[args.train_index][3]
+    train_T = parameters[args.train_index][4]
+    train_Q = parameters[args.train_index][5]
+    train_L = parameters[args.train_index][6]
+    print('Number of vehicles: {}.'.format(train_K),
+          'Number of users: {}.'.format(train_N),
+          'Maximum route duration: {}.'.format(train_T),
+          'Maximum vehicle capacity: {}.'.format(train_Q),
+          'Maximum ride time: {}.'.format(train_L))
+
+    name = train_type + str(train_K) + '-' + str(train_N)
 
     path_dataset = ['./dataset/' + file for file in os.listdir('./dataset')]
     datasets = []
@@ -111,12 +111,12 @@ def main():
         print('CUDA is not available. Utilize CPUs for computation.\n')
         device = torch.device("cpu")
 
-    input_seq_len = num_users
-    target_seq_len = num_users + 2
+    input_seq_len = train_N
+    target_seq_len = train_N + 2
 
     model = Transformer(
         device=device,
-        num_vehicles=num_vehicles,
+        num_vehicles=train_K,
         input_seq_len=input_seq_len,
         target_seq_len=target_seq_len,
         d_model=args.d_model,
@@ -127,11 +127,7 @@ def main():
         d_ff=args.d_ff,
         dropout=args.dropout)
 
-    model_name = instance_name + '-wt' + str(args.wait_time) + '-ts'
-    if args.train_set > 1:
-        checkpoint = torch.load('./model/model-' + model_name + str(args.train_set - 1) + '.model')
-        model.load_state_dict(checkpoint['model_state_dict'])
-        print('Successfully loaded ' + model_name + str(args.train_set - 1) + '.model\n')
+    model_name = name + '-wt' + str(args.wait_time)
 
     if cuda_available:
         model.cuda()
@@ -206,8 +202,9 @@ def main():
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
             'loss': criterion,
-        }, './model/' + 'model-' + model_name + str(args.train_set) + '.model')
+        }, './model/' + 'model-' + model_name + '.model')
 
         end = time.time()
         exec_time = end - start
@@ -223,7 +220,7 @@ def main():
             file.write("\n")
 
     fig, ax = plt.subplots()
-    file_name = 'accuracy-' + instance_name + '-' + str(args.wait_time)
+    file_name = 'accuracy-' + name + '-' + str(args.wait_time)
     ax.plot(np.arange(epochs), train_performance, label="Training accuracy")
     ax.plot(np.arange(epochs), valid_performance, label="Validation accuracy")
     ax.set_xlabel('Epoch')

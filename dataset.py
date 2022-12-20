@@ -25,7 +25,7 @@ def parse_arguments():
     parser.add_argument('--train_index', type=int, default=8)
     parser.add_argument('--num_subsets', type=int, default=3)
     parser.add_argument('--num_instances', type=int, default=500)
-    parser.add_argument('--wait_time', type=int, default=1440)
+    parser.add_argument('--wait_time', type=int, default=7)
 
     args = parser.parse_args()
 

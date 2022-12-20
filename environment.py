@@ -261,7 +261,7 @@ class Darp:
 
                 if user.id not in vehicle.serving:
                     # Check the pick-up time window
-                    if check_window(user.pickup_window, vehicle.free_time):
+                    if check_window(user.pickup_window, vehicle.free_time) and user.id > self.train_N / 2:
                         raise ValueError('The pick-up time window of User {} is broken: {:.2f} not in {}.'.format(
                             user.id, vehicle.free_time, user.pickup_window))
                     # Append the user to the serving list
@@ -272,7 +272,7 @@ class Darp:
                         raise ValueError('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
                             user.id, user.ride_time - user.serve_duration, self.train_L))
                     # Check the drop-off time window
-                    if check_window(user.dropoff_window, vehicle.free_time):
+                    if check_window(user.dropoff_window, vehicle.free_time) and user.id <= self.train_N / 2:
                         raise ValueError('The drop-off time window of User {} is broken: {:.2f} not in {}.'.format(
                             user.id, vehicle.free_time, user.dropoff_window))
                     # Remove the user from the serving list
