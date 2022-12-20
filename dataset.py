@@ -31,9 +31,9 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--num_subsets', type=int, default=3)
-    parser.add_argument('--num_instances', type=int, default=500)
+    parser.add_argument('--num_instances', type=int, default=100)
     parser.add_argument('--index', type=int, default=8)
-    parser.add_argument('--wait_time', type=int, default=5)
+    parser.add_argument('--wait_time', type=int, default=7)
 
     args = parser.parse_args()
 
@@ -243,28 +243,23 @@ def main():
                                 user.flag = 2
 
                     # User information.
-                    users_info = [list(map(np.float64,
-                                           [user.duration,
-                                            user.load,
-                                            user.status,
-                                            user.served_by,
-                                            user.ride_time,
-                                            shift_window(user.pickup_window, time),
-                                            shift_window(user.dropoff_window, time),
-                                            vehicle.id,
-                                            user.flag]
-                                           + [vehicle.duration + euclidean_distance(
-                                               vehicle.coords, user.pickup_coords)
-                                              if user.status == 0 else
-                                              vehicle.duration + euclidean_distance(
-                                                  vehicle.coords, user.dropoff_coords)
-                                              for vehicle in vehicles])) for user in users]
-
-                    # Mask information.
-                    # 0: waiting, 1: being served, 2: done
-                    mask_info = [0 if user.flag == 2 else 1 for user in users]
-
-                    state = [users_info, mask_info]
+                    state = [list(map(np.float32,
+                                      [user.pickup_coords,
+                                       user.dropoff_coords,
+                                       shift_window(user.pickup_window, time),
+                                       shift_window(user.dropoff_window, time),
+                                       user.ride_time,
+                                       user.status,
+                                       user.flag,
+                                       user.served_by,
+                                       vehicle.id]
+                                      + [vehicle.duration + euclidean_distance(
+                                          vehicle.coords, user.pickup_coords)
+                                         if user.status == 0 else
+                                         vehicle.duration + euclidean_distance(
+                                             vehicle.coords, user.dropoff_coords)
+                                         for vehicle in vehicles]))
+                             for user in users]
 
                     # if vehicle.free_time + args.wait_time < vehicle.schedule[vehicle.ordinal]:
                     #     action = num_users + 1
@@ -307,7 +302,7 @@ def main():
                             else:
                                 if user.ride_time - user.duration > max_ride_time + 1e-2:
                                     raise ValueError('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
-                                            user.id, user.ride_time - user.duration, max_ride_time))
+                                        user.id, user.ride_time - user.duration, max_ride_time))
 
                                 if check_window(user.dropoff_window, vehicle.free_time):
                                     raise ValueError(

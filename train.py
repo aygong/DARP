@@ -1,5 +1,4 @@
 import numpy as np
-from icecream import ic
 import os
 import argparse
 import matplotlib.pyplot as plt
@@ -14,7 +13,6 @@ from torch import nn
 
 from transformer import Transformer
 import torch.nn.functional as f
-
 
 parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
               ['1', 'a', 2, 20, 600, 3, 30],  # 1
@@ -37,10 +35,10 @@ parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--train_set', type=int, default=1)
     parser.add_argument('--index', type=int, default=8)
     parser.add_argument('--batch_size', type=int, default=256)
-    parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--mask', type=str, default='off')
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--d_model', type=int, default=128)
     parser.add_argument('--num_layers', type=int, default=4)
     parser.add_argument('--num_heads', type=int, default=8)
@@ -48,7 +46,7 @@ def parse_arguments():
     parser.add_argument('--d_v', type=int, default=64)
     parser.add_argument('--d_ff', type=int, default=2048)
     parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--wait_time', type=int, default=5)
+    parser.add_argument('--wait_time', type=int, default=7)
 
     args = parser.parse_args()
 
@@ -74,7 +72,7 @@ def main():
     path_dataset = ['./dataset/' + file for file in os.listdir('./dataset')]
     datasets = []
     for file in path_dataset:
-        ic('Datafile folder:', file)
+        print('Load', file)
         datasets.append(torch.load(file))
     dataset = ConcatDataset(datasets)
     data_size = len(dataset)
@@ -89,7 +87,7 @@ def main():
     random.seed(0)
 
     indices = list(range(data_size))
-    split = int(np.floor(0.02 * data_size))
+    split = int(np.floor(0.1 * data_size))
     train_indices, valid_indices = indices[split:], indices[:split]
     print('The size of training set: {}.'.format(len(train_indices)),
           'The size of validation set: {}.\n'.format(len(valid_indices)))
@@ -116,11 +114,8 @@ def main():
     target_seq_len = num_users + 2
 
     model = Transformer(
+        device=device,
         num_vehicles=num_vehicles,
-        num_users=num_users,
-        max_route_duration=max_route_duration,
-        max_vehicle_capacity=max_vehicle_capacity,
-        max_ride_time=max_ride_time,
         input_seq_len=input_seq_len,
         target_seq_len=target_seq_len,
         d_model=args.d_model,
@@ -130,6 +125,12 @@ def main():
         d_v=args.d_v,
         d_ff=args.d_ff,
         dropout=args.dropout)
+
+    model_name = instance_name + '-wt' + str(args.wait_time) + '-ts'
+    if args.train_set > 1:
+        checkpoint = torch.load('./model/model-' + model_name + str(args.train_set - 1) + '.model')
+        model.load_state_dict(checkpoint['model_state_dict'])
+        print('Successfully loaded ' + model_name + str(args.train_set - 1) + '.model\n')
 
     if cuda_available:
         model.cuda()
@@ -152,22 +153,11 @@ def main():
 
         for _, (states, actions) in enumerate(train_data):
             iters += 1
-            _, mask_info = states
             actions = actions.to(device)
-
-            if args.mask == 'on':
-                # print('Use mask in training.')
-                mask = torch.zeros(len(actions), input_seq_len)
-                for user_id in range(num_users):
-                    for example_id in range(len(actions)):
-                        mask[example_id][user_id - num_users] = mask_info[user_id][example_id]
-                mask = mask.to(device)
-            else:
-                mask = None
 
             optimizer.zero_grad()
 
-            outputs = model(states, device, mask)
+            outputs = model(states)
             loss = criterion(outputs, actions)
 
             loss.backward()
@@ -199,20 +189,9 @@ def main():
 
                 # Loop over batches in an epoch using valid_data
                 for _, (states, actions) in enumerate(valid_data):
-                    _, mask_info = states
                     actions = actions.to(device)
 
-                    if args.mask == 'on':
-                        # print('Use mask in validation.')
-                        mask = torch.zeros(len(actions), input_seq_len)
-                        for user_id in range(num_users):
-                            for example_id in range(len(actions)):
-                                mask[example_id][user_id - num_users] = mask_info[user_id][example_id]
-                        mask = mask.to(device)
-                    else:
-                        mask = None
-
-                    outputs = model(states, device, mask)
+                    outputs = model(states)
                     loss = criterion(outputs, actions)
 
                     _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
@@ -227,7 +206,7 @@ def main():
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': criterion,
-        }, './model/' + 'model-' + instance_name + '-' + str(args.wait_time) + '.model')
+        }, './model/' + 'model-' + model_name + str(args.train_set) + '.model')
 
         end = time.time()
         exec_time = end - start
