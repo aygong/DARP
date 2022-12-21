@@ -1,82 +1,31 @@
+from utils import *
+from transformer import Transformer
+
 import numpy as np
 import os
-import argparse
 import matplotlib.pyplot as plt
 import time
 import random
 import json
 
-from torch.utils.data import ConcatDataset, SubsetRandomSampler, DataLoader
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch
 from torch import nn
-
-from transformer import Transformer
+from torch.utils.data import ConcatDataset, SubsetRandomSampler, DataLoader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn.functional as f
 
 
-parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
-              ['1', 'a', 2, 20, 600, 3, 30],  # 1
-              ['2', 'a', 2, 24, 720, 3, 30],  # 2
-              ['4', 'a', 3, 24, 480, 3, 30],  # 3
-              ['6', 'a', 3, 36, 720, 3, 30],  # 4
-              ['9', 'a', 4, 32, 480, 3, 30],  # 5
-              ['10', 'a', 4, 40, 600, 3, 30],  # 6
-              ['11', 'a', 4, 48, 720, 3, 30],  # 7
-              ['24', 'b', 2, 16, 480, 6, 45],  # 8
-              ['25', 'b', 2, 20, 600, 6, 45],  # 9
-              ['26', 'b', 2, 24, 720, 6, 45],  # 10
-              ['28', 'b', 3, 24, 480, 6, 45],  # 11
-              ['30', 'b', 3, 36, 720, 6, 45],  # 12
-              ['33', 'b', 4, 32, 480, 6, 45],  # 13
-              ['34', 'b', 4, 40, 600, 6, 45],  # 14
-              ['35', 'b', 4, 48, 720, 6, 45]]  # 15
-
-
-def parse_arguments():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--train_index', type=int, default=8)
-    parser.add_argument('--wait_time', type=int, default=7)
-    parser.add_argument('--batch_size', type=int, default=256)
-    parser.add_argument('--epochs', type=int, default=30)
-    parser.add_argument('--d_model', type=int, default=128)
-    parser.add_argument('--num_layers', type=int, default=4)
-    parser.add_argument('--num_heads', type=int, default=8)
-    parser.add_argument('--d_k', type=int, default=64)
-    parser.add_argument('--d_v', type=int, default=64)
-    parser.add_argument('--d_ff', type=int, default=2048)
-    parser.add_argument('--dropout', type=float, default=0.1)
-
-    args = parser.parse_args()
-
-    return args
-
-
-def main():
-    args = parse_arguments()
-
-    train_type = parameters[args.train_index][1]
-    train_K = parameters[args.train_index][2]
-    train_N = parameters[args.train_index][3]
-    train_T = parameters[args.train_index][4]
-    train_Q = parameters[args.train_index][5]
-    train_L = parameters[args.train_index][6]
-    print('Number of vehicles: {}.'.format(train_K),
-          'Number of users: {}.'.format(train_N),
-          'Maximum route duration: {}.'.format(train_T),
-          'Maximum vehicle capacity: {}.'.format(train_Q),
-          'Maximum ride time: {}.'.format(train_L))
-
+def supervision(args):
+    train_type, train_K, train_N, train_T, train_Q, train_L = load_instance(args.train_index, 'train')
     name = train_type + str(train_K) + '-' + str(train_N)
 
     path_dataset = ['./dataset/' + file for file in os.listdir('./dataset')]
-    datasets = []
+    training_sets = []
     for file in path_dataset:
         print('Load', file)
-        datasets.append(torch.load(file))
-    dataset = ConcatDataset(datasets)
-    data_size = len(dataset)
+        training_sets.append(torch.load(file))
+    training_set = ConcatDataset(training_sets)
+    data_size = len(training_set)
 
     path_model = './model/'
     os.makedirs(path_model, exist_ok=True)
@@ -88,7 +37,7 @@ def main():
     random.seed(0)
 
     indices = list(range(data_size))
-    split = int(np.floor(0.1 * data_size))
+    split = int(np.floor(0.02 * data_size))
     train_indices, valid_indices = indices[split:], indices[:split]
     print('The size of training set: {}.'.format(len(train_indices)),
           'The size of validation set: {}.\n'.format(len(valid_indices)))
@@ -99,8 +48,8 @@ def main():
         np.random.shuffle(valid_indices)
     train_sampler = SubsetRandomSampler(train_indices)
     valid_sampler = SubsetRandomSampler(valid_indices)
-    train_data = DataLoader(dataset, batch_size=args.batch_size, sampler=train_sampler)
-    valid_data = DataLoader(dataset, batch_size=args.batch_size, sampler=valid_sampler)
+    train_data = DataLoader(training_set, batch_size=args.batch_size, sampler=train_sampler)
+    valid_data = DataLoader(training_set, batch_size=args.batch_size, sampler=valid_sampler)
 
     # Determine if your system supports CUDA
     cuda_available = torch.cuda.is_available()
@@ -111,14 +60,11 @@ def main():
         print('CUDA is not available. Utilize CPUs for computation.\n')
         device = torch.device("cpu")
 
-    input_seq_len = train_N
-    target_seq_len = train_N + 2
-
     model = Transformer(
         device=device,
         num_vehicles=train_K,
-        input_seq_len=input_seq_len,
-        target_seq_len=target_seq_len,
+        input_seq_len=train_N,
+        target_seq_len=train_N + 2,
         d_model=args.d_model,
         num_layers=args.num_layers,
         num_heads=args.num_heads,
@@ -127,7 +73,7 @@ def main():
         d_ff=args.d_ff,
         dropout=args.dropout)
 
-    model_name = name + '-wt' + str(args.wait_time)
+    model_name = name + '-' + str(args.wait_time)
 
     if cuda_available:
         model.cuda()
@@ -142,7 +88,7 @@ def main():
     model_validation = True
 
     for epoch in range(epochs):
-        print('\033[1m--------Training for Epoch {} starting:--------\033[0m'.format(epoch))
+        print('--------Training for Epoch {} starting:--------'.format(epoch))
         start = time.time()
         running_loss = 0
         iters = 0
@@ -178,7 +124,7 @@ def main():
 
         if model_validation:
             # Validation
-            print('\033[1m-------Validation for Epoch {} starting:-------\033[0m'.format(epoch))
+            print('-------Validation for Epoch {} starting:-------'.format(epoch))
             model.eval()
 
             with torch.no_grad():
@@ -232,7 +178,3 @@ def main():
     with open(path_result + file_name + '.npy', 'wb') as file:
         np.save(file, train_performance)  # noqa
         np.save(file, valid_performance)  # noqa
-
-
-if __name__ == '__main__':
-    main()

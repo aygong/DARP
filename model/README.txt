@@ -1,1 +1,1 @@
-This folder contains models saved by train.py.
+This folder contains models saved by supervision.py.

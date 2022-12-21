@@ -1,1 +1,1 @@
-This folder contains results saved by train.py.
+This folder contains results saved by supervision.py and evaluation.py.
