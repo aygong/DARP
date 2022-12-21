@@ -131,7 +131,7 @@ def evaluation(args):
     os.makedirs(path_result, exist_ok=True)
 
     with open(path_result + 'evaluation.txt', 'a+') as output:
-        # Dump the parameters of training instance
+        # Dump the parameters of training instances
         output.write('Training instances -> ')
         json.dump({
             'Type': darp.train_type, 'K': darp.train_K, 'N': darp.train_N,
@@ -139,7 +139,7 @@ def evaluation(args):
         }, output)
         output.write('\n')
 
-        # Dump the parameters of test instance
+        # Dump the parameters of test instances
         output.write('Test instances -> ')
         json.dump({
             'Type': darp.test_type, 'K': darp.test_K, 'N': darp.test_N,
