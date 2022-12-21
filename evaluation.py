@@ -138,6 +138,7 @@ def evaluation(args):
             'T': darp.train_T, 'Q': darp.train_Q, 'L': darp.train_L,
         }, output)
         output.write('\n')
+
         # Dump the parameters of test instance
         output.write('Test instances -> ')
         json.dump({
@@ -145,6 +146,7 @@ def evaluation(args):
             'T': darp.test_T, 'Q': darp.test_Q, 'L': darp.test_L,
         }, output)
         output.write('\n')
+
         # Dump the metrics on one standard instance
         json.dump({
             'Cost (Rist 2021)': round(eval_rist_cost[0], 2),
@@ -154,6 +156,7 @@ def evaluation(args):
             '# Ride Time': eval_ride_time[0],
         }, output)
         output.write('\n')
+
         # Dump the metrics on multiple random instances
         json.dump({
             'Aver. Cost (Rist 2021)': round(sum(eval_rist_cost) / len(eval_rist_cost), 2),
@@ -163,6 +166,7 @@ def evaluation(args):
             'Aver. # Ride Time': round(sum(eval_ride_time) / len(eval_ride_time), 2),
         }, output)
         output.write('\n')
+
         # Dump the number of problematic requests
         json.dump({
             '# Not Same': int(np.sum(np.asarray(eval_not_same) > 0)),
