@@ -28,7 +28,7 @@ def evaluation(args):
         dropout=args.dropout)
 
     # Load the trained model
-    model_name = darp.train_name + '-wt' + str(args.wait_time)
+    model_name = darp.train_name + '-' + str(args.wait_time)
     checkpoint = torch.load('./model/model-' + model_name + '.model')
     darp.model.load_state_dict(checkpoint['model_state_dict'])
     darp.model.eval()
