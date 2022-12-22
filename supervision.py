@@ -19,7 +19,7 @@ def supervision(args):
     train_type, train_K, train_N, train_T, train_Q, train_L = load_instance(args.train_index, 'train')
     name = train_type + str(train_K) + '-' + str(train_N)
 
-    path_dataset = ['./dataset/' + file for file in os.listdir('./dataset')]
+    path_dataset = ['./dataset/' + file for file in os.listdir('./dataset') if file.startswith(name)]
     training_sets = []
     for file in path_dataset:
         print('Load', file)

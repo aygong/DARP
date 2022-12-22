@@ -24,6 +24,7 @@ def parse_arguments():
     parser.add_argument('--evaluation', type=bool, default=False)
     parser.add_argument('--test_index', type=int, default=8)
     parser.add_argument('--num_test_instances', type=int, default=10)
+    parser.add_argument('--beam', type=int, default=0)
 
     # Arguments of transformer.py
     parser.add_argument('--d_model', type=int, default=128)

@@ -104,6 +104,8 @@ class Darp:
             self.break_ride_time = []
             self.break_same = []
             self.break_done = []
+            self.indices = [] # for beam search
+            self.time = 0.0
 
     def reset(self, num_instance):
         instance = self.list_instances[num_instance]
@@ -179,6 +181,7 @@ class Darp:
             self.break_ride_time = []
             self.break_same = []
             self.break_done = []
+            self.time_penalty = 0 
 
         return instance['objective']  # noqa
 
@@ -342,9 +345,10 @@ class Darp:
         else:
             outputs = self.model(state, user_mask, src_mask)
 
-        _, action = torch.max(f.softmax(outputs, dim=1), 1)
+        probs = f.softmax(outputs, dim=1)
+        _, action = torch.max(probs, 1)
 
-        return action.item()
+        return action.item(), probs
 
     def evaluate_step(self, k, action):
         vehicle = self.vehicles[k]
@@ -364,6 +368,7 @@ class Darp:
                         print('The pick-up time window of User {} is broken: {:.2f} not in {}.'.format(
                             user.id, vehicle.free_time, user.pickup_window))
                         self.break_window.append(user.id)
+                        self.time_penalty += vehicle.free_time - user.pickup_window[0]
                     # Append the user to the serving list
                     vehicle.serving.append(user.id)
                 else:
@@ -372,11 +377,13 @@ class Darp:
                         print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
                             user.id, user.ride_time - user.serve_duration, self.test_L))
                         self.break_ride_time.append(user.id)
+                        self.time_penalty += user.ride_time - user.serve_duration - self.test_L
                     # Check the drop-off time window
                     if check_window(user.dropoff_window, vehicle.free_time) and user.id <= self.test_N / 2:
                         print('The drop-off time window of User {} is broken: {:.2f} not in {}.'.format(
                             user.id, vehicle.free_time, user.dropoff_window))
                         self.break_window.append(user.id)
+                        self.time_penalty += vehicle.free_time - user.dropoff_window[0]
                     # Remove the user from the serving list
                     vehicle.serving.remove(user.id)
 

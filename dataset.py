@@ -10,7 +10,7 @@ def dataset(args):
 
     path_dataset = './dataset/'
     os.makedirs(path_dataset, exist_ok=True)
-    shutil.rmtree(path_dataset)
+    shutil.rmtree(path_dataset) 
     print("Directory {} has been removed successfully".format(path_dataset))
     os.makedirs(path_dataset)
 

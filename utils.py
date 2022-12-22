@@ -1,5 +1,5 @@
 import math
-
+import torch
 
 parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
               ['1', 'a', 2, 20, 600, 3, 30],  # 1
@@ -47,6 +47,14 @@ def load_instance(index, mode):
 
     return _type_, K, N, T, Q, L
 
+def get_device(cuda_available):
+    if cuda_available:
+        print('CUDA is available. Utilize GPUs for computation.\n')
+        device = torch.device("cuda")
+    else:
+        print('CUDA is not available. Utilize CPUs for computation.\n')
+        device = torch.device("cpu")
+    return device
 
 def node_to_user(N):
     node2user = {}
