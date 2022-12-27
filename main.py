@@ -42,14 +42,17 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
-
-    if args.dataset:
+    print(args.dataset)
+    if bool(args.dataset):
+        print("Dataset generation started.")
         dataset(args)
 
-    if args.supervision:
+    if bool(args.supervision):
+        print("Supervision started.")
         supervision(args)
 
-    if args.evaluation:
+    if bool(args.evaluation):
+        print("Evaluation started.")
         evaluation(args)
 
 

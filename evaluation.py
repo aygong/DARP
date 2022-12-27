@@ -55,6 +55,7 @@ def evaluation(args):
     src_mask = torch.Tensor(src_mask).to(device)
 
     for num_instance in range(args.num_test_instances):
+        print('--------Evaluation on instance {}--------'.format(num_instance))
         start = t.time()
         true_cost = darp.reset(num_instance)
         if args.beam:
@@ -103,6 +104,7 @@ def evaluation(args):
         print('# broken ride time: {}\n'.format(eval_ride_time[-1]))
 
     # Print the metrics on one standard instance
+    print('--------Evaluation on one standard instance--------')
     print('Cost (Rist 2021): {:.2f}'.format(eval_rist_cost[0]))
     print('Cost (predicted): {:.2f}'.format(eval_pred_cost[0]))
     print('Diff. (%): {:.2f}'.format(eval_rela_diff[0]))
@@ -112,6 +114,7 @@ def evaluation(args):
     print('Run time: {:.2f}\n'.format(eval_run_time[0]))
 
     # Print the metrics on multiple random instances
+    print('--------Average metrics for {} test instances:--------'.format(args.num_test_instances))
     print('Aver. Cost (Rist 2021): {:.2f}'.format(sum(eval_rist_cost) / len(eval_rist_cost)))
     print('Aver. Cost (predicted): {:.2f}'.format(sum(eval_pred_cost) / len(eval_pred_cost)))
     print('Aver. Diff. (%): {:.2f}'.format(sum(eval_rela_diff) / len(eval_rela_diff)))
@@ -201,11 +204,14 @@ def beam_search(darp, num_instance, src_mask, beam_width):
     WARNING: Increases running time exponentially with beam_width.
     a2-16 greedy takes ~10s while beam search with beam_width=10 takes ~1000s.
     """
+    #TODO: transpositions are possible, they need to be detected and removed from the beam
+    darp.load_from_file(num_instance)
     k_best = [(darp, False, 0.0)] # (darp, finish, sumlogprob)
     # Run the simulator
     while sum([done for (env, done, score) in k_best]) < beam_width:
         k_best_new = []
-        for (env, done, score) in k_best:
+        envs = {}
+        for i, (env, done, score) in enumerate(k_best):
             if not done:
                 waiting = True
                 while waiting:
@@ -227,17 +233,19 @@ def beam_search(darp, num_instance, src_mask, beam_width):
                         env.evaluate_step(k, action)
                     else:
                         waiting = False
-                log_probs, actions = torch.topk(torch.log(outputs.squeeze(0)[:-1]), min(beam_width, 16))
+                log_probs, actions = torch.topk(torch.log(outputs.squeeze(0)[:-1]), min(beam_width, darp.train_N))
+                envs[i] = env
                 for log_prob, action in zip(log_probs, actions):
                     # expand each current candidate
-                    k_best_new.append((copy.deepcopy(env), score - log_prob.item(), k, action.item()))
+                    k_best_new.append((i, score - log_prob.item(), k, action.item()))
 
         # order by score, select k best
         k_best_new = sorted(k_best_new, key=lambda x: x[1])[:beam_width]
 
         # step the env in potential envs
         k_best = []
-        for (env, score, k, action) in k_best_new:
+        for (i, score, k, action) in k_best_new:
+            env = copy.deepcopy(envs[i])
             env.evaluate_step(k, action)
             k_best.append((env, not env.finish(), score))
     return k_best 

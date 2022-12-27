@@ -89,10 +89,7 @@ class Darp:
             self.data_path = './instance/' + self.test_name + '-test' + '.txt'
 
         # Read instances
-        self.list_instances = []
-        with open(self.data_path, 'r') as file:
-            for instance in file:
-                self.list_instances.append(json.loads(instance))
+        self.load_from_file()
 
         # Initialize the lists of vehicles and users
         self.users = []
@@ -106,6 +103,19 @@ class Darp:
             self.break_done = []
             self.indices = [] # for beam search
             self.time = 0.0
+
+
+    def load_from_file(self, num_instance=None):
+        """ Load the instances from the file, in beam search we load the instances one by one """
+        if num_instance:
+            instance = self.list_instances[num_instance]
+            self.list_instances = [instance]
+        else:
+            self.list_instances = []
+            with open(self.data_path, 'r') as file:
+                for instance in file:
+                    self.list_instances.append(json.loads(instance))
+
 
     def reset(self, num_instance):
         instance = self.list_instances[num_instance]
