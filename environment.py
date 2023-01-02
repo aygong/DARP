@@ -65,6 +65,7 @@ class Darp:
         self.mode = mode
         self.device = device
         self.model = None
+        self.logs = True
 
         # Load the parameters of training instances
         self.train_type, self.train_K, self.train_N, self.train_T, self.train_Q, self.train_L = \
@@ -375,8 +376,9 @@ class Darp:
                 if user.id not in vehicle.serving:
                     # Check the pick-up time window
                     if check_window(user.pickup_window, vehicle.free_time) and user.id > self.test_N / 2:
-                        print('The pick-up time window of User {} is broken: {:.2f} not in {}.'.format(
-                            user.id, vehicle.free_time, user.pickup_window))
+                        if self.logs:
+                            print('The pick-up time window of User {} is broken: {:.2f} not in {}.'.format(
+                                user.id, vehicle.free_time, user.pickup_window))
                         self.break_window.append(user.id)
                         self.time_penalty += vehicle.free_time - user.pickup_window[0]
                     # Append the user to the serving list
@@ -384,14 +386,16 @@ class Darp:
                 else:
                     # Check the ride time
                     if user.ride_time - user.serve_duration > self.test_L + 1e-2:
-                        print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
-                            user.id, user.ride_time - user.serve_duration, self.test_L))
+                        if self.logs:
+                            print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
+                                user.id, user.ride_time - user.serve_duration, self.test_L))
                         self.break_ride_time.append(user.id)
                         self.time_penalty += user.ride_time - user.serve_duration - self.test_L
                     # Check the drop-off time window
                     if check_window(user.dropoff_window, vehicle.free_time) and user.id <= self.test_N / 2:
-                        print('The drop-off time window of User {} is broken: {:.2f} not in {}.'.format(
-                            user.id, vehicle.free_time, user.dropoff_window))
+                        if self.logs:
+                            print('The drop-off time window of User {} is broken: {:.2f} not in {}.'.format(
+                                user.id, vehicle.free_time, user.dropoff_window))
                         self.break_window.append(user.id)
                         self.time_penalty += vehicle.free_time - user.dropoff_window[0]
                     # Remove the user from the serving list

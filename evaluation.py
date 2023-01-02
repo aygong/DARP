@@ -29,7 +29,14 @@ def evaluation(args):
 
     # Load the trained model
     model_name = darp.train_name + '-' + str(args.wait_time)
-    checkpoint = torch.load('./model/model-' + model_name + '.model')
+    if args.rl_flag:
+       model = "reinforce"
+       print("Load the trained model with REINFORCE")
+    else:
+        model = "supervised"
+        print("Load the trained model with supervised learning")
+
+    checkpoint = torch.load('./model/' + model + '-' + model_name + '.model')
     darp.model.load_state_dict(checkpoint['model_state_dict'])
     darp.model.eval()
 
@@ -179,8 +186,9 @@ def evaluation(args):
         output.write('\n')
 
 
-def greedy_evaluation(darp, num_instance, src_mask):
+def greedy_evaluation(darp, num_instance, src_mask, logs=True):
     # Run the simulator
+    darp.log_probs = []
     while darp.finish():
         free_times = [vehicle.free_time for vehicle in darp.vehicles]
         time = np.min(free_times)
@@ -193,7 +201,8 @@ def greedy_evaluation(darp, num_instance, src_mask):
 
             darp.beta(k)
             state = darp.state(k, time)
-            action, _ = darp.predict(state, user_mask=None, src_mask=src_mask)
+            action, probs = darp.predict(state, user_mask=None, src_mask=src_mask)
+            darp.log_probs.append(torch.log(probs.squeeze(0)[action]))
             darp.evaluate_step(k, action)
     return darp.cost()
 
@@ -253,5 +262,10 @@ def beam_search(darp, num_instance, src_mask, beam_width):
 def beam_choose(darps):
     idx = np.argmin([darp[0].time_penalty for darp in darps])
     darp  = darps[idx]
+    print()
+    print('--------Beam results--------')
+    for darp in darps:
+        print(round(darp[0].cost(),2 ), round(darp[0].time_penalty, 2))
+    print()
     return darp[0], darp[0].cost()
     
