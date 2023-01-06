@@ -23,6 +23,7 @@ def supervision(args):
     for file in path_dataset:
         print('Load', file)
         training_sets.append(torch.load(file))
+        os.remove(file)
     training_set = ConcatDataset(training_sets)
     data_size = len(training_set)
     path_model = './model/'

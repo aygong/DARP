@@ -33,7 +33,7 @@ def evaluation(args):
        model = "reinforce"
        print("Load the trained model with REINFORCE")
     else:
-        model = "supervised"
+        model = "model"
         print("Load the trained model with supervised learning")
 
     checkpoint = torch.load('./model/' + model + '-' + model_name + '.model')
@@ -67,6 +67,11 @@ def evaluation(args):
         true_cost = darp.reset(num_instance)
         if args.beam:
             darps = beam_search(darp, num_instance, src_mask, args.beam)
+            print()
+            print('--------Beam results--------')
+            for darp in darps:
+                print(round(darp[0].cost(),2), round(abs(true_cost - darp[0].cost()) / true_cost * 100, 2), len(darp[0].break_window), len(set(darp[0].break_ride_time)), round(darp[0].time_penalty, 2))
+            print()
             darp, darp_cost = beam_choose(darps)
         else:
             darp_cost = greedy_evaluation(darp, num_instance, src_mask)
@@ -262,10 +267,5 @@ def beam_search(darp, num_instance, src_mask, beam_width):
 def beam_choose(darps):
     idx = np.argmin([darp[0].time_penalty for darp in darps])
     darp  = darps[idx]
-    print()
-    print('--------Beam results--------')
-    for darp in darps:
-        print(round(darp[0].cost(),2 ), round(darp[0].time_penalty, 2))
-    print()
     return darp[0], darp[0].cost()
     

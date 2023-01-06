@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as f
+import time
 
 
 class Head(nn.Module):
@@ -206,7 +207,6 @@ class Transformer(nn.Module):
     def forward(self, states, user_mask=None, src_mask=None):
         # Embedding.
         x = []
-
         for _, user_info in enumerate(states):
             user_seq = []
 
@@ -229,13 +229,15 @@ class Transformer(nn.Module):
             for k in range(1, self.num_vehicles + 1):
                 user_seq.append(self.linear_duration(user_info[8 + k].unsqueeze(-1).to(self.device)))
 
-            user_seq = self.user_encoder(torch.stack(user_seq).permute(1, 0, 2), src_mask=user_mask)
-            user_seq = self.user_linear(user_seq.flatten(start_dim=1))
+            x.append(torch.stack(user_seq).permute(1, 0, 2))
+            #user_seq = self.user_encoder(torch.stack(user_seq).permute(1, 0, 2), src_mask=user_mask)
+            #user_seq = self.user_linear(user_seq.flatten(start_dim=1))
 
-            x.append(user_seq)
+            #x.append(user_seq)
 
         x = torch.stack(x, dim=1)
-
+        x = self.user_encoder(x, src_mask=user_mask)
+        x = self.user_linear(x.flatten(start_dim=2))
         # Encoder.
         x = self.encoder(x, src_mask=src_mask)  # Shape: (batch_size, input_seq_len, d_model).
 

@@ -64,6 +64,10 @@ def reinforce(args):
         loss.backward()
         torch.nn.utils.clip_grad_norm_(darp.model.parameters(), 0.5)
         optimizer.step()
+
+        running_loss += loss.item()
+        scheduler.step(running_loss)
+        
         run_time = time.time() - start
         run_times.append(run_time)
 
