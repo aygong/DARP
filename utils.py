@@ -47,6 +47,14 @@ def load_instance(index, mode):
 
     return _type_, K, N, T, Q, L
 
+def get_device(cuda_available):
+    if cuda_available:
+        print('CUDA is available. Utilize GPUs for computation.\n')
+        device = torch.device("cuda")
+    else:
+        print('CUDA is not available. Utilize CPUs for computation.\n')
+        device = torch.device("cpu")
+    return device
 
 def get_device(cuda_available):
     if cuda_available:

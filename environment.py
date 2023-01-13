@@ -66,7 +66,10 @@ class Darp:
         self.device = device
         self.model = None
         self.logs = True
+<<<<<<< HEAD
         self.log_probs = None
+=======
+>>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
         # Load the parameters of training instances
         self.train_type, self.train_K, self.train_N, self.train_T, self.train_Q, self.train_L = \
@@ -90,8 +93,12 @@ class Darp:
             # Set the path of test instances
             self.data_path = './instance/' + self.test_name + '-test' + '.txt'
 
+<<<<<<< HEAD
         # Load instances
         self.list_instances = []
+=======
+        # Read instances
+>>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
         self.load_from_file()
 
         # Initialize the lists of vehicles and users
@@ -104,19 +111,34 @@ class Darp:
             self.break_ride_time = []
             self.break_same = []
             self.break_done = []
+<<<<<<< HEAD
             self.time_penalty = 0
             self.indices = []  # for beam search
             self.time = 0.0
 
+=======
+            self.indices = [] # for beam search
+            self.time = 0.0
+
+
+>>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
     def load_from_file(self, num_instance=None):
         """ Load the instances from the file, in beam search we load the instances one by one """
         if num_instance:
             instance = self.list_instances[num_instance]
             self.list_instances = [instance]
         else:
+<<<<<<< HEAD
             with open(self.data_path, 'r') as file:
                 for instance in file:
                     self.list_instances.append(json.loads(instance))
+=======
+            self.list_instances = []
+            with open(self.data_path, 'r') as file:
+                for instance in file:
+                    self.list_instances.append(json.loads(instance))
+
+>>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
     def reset(self, num_instance):
         K, N, T, Q, L = self.parameter()
@@ -188,7 +210,11 @@ class Darp:
             self.break_ride_time = []
             self.break_same = []
             self.break_done = []
+<<<<<<< HEAD
             self.time_penalty = 0
+=======
+            self.time_penalty = 0 
+>>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
         return instance['objective']  # noqa
 
@@ -369,7 +395,11 @@ class Darp:
 
                 if user.id not in vehicle.serving:
                     # Check the pick-up time window
+<<<<<<< HEAD
                     if check_window(user.pickup_window, vehicle.free_time) and user.id > N / 2:
+=======
+                    if check_window(user.pickup_window, vehicle.free_time) and user.id > self.test_N / 2:
+>>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
                         if self.logs:
                             print('The pick-up time window of User {} is broken: {:.2f} not in {}.'.format(
                                 user.id, vehicle.free_time, user.pickup_window))
@@ -379,6 +409,7 @@ class Darp:
                     vehicle.serving.append(user.id)
                 else:
                     # Check the ride time
+<<<<<<< HEAD
                     if user.ride_time - user.serve_duration > L + 1e-2:
                         if self.logs:
                             print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
@@ -387,6 +418,16 @@ class Darp:
                         self.time_penalty += user.ride_time - user.serve_duration - L
                     # Check the drop-off time window
                     if check_window(user.dropoff_window, vehicle.free_time) and user.id <= N / 2:
+=======
+                    if user.ride_time - user.serve_duration > self.test_L + 1e-2:
+                        if self.logs:
+                            print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
+                                user.id, user.ride_time - user.serve_duration, self.test_L))
+                        self.break_ride_time.append(user.id)
+                        self.time_penalty += user.ride_time - user.serve_duration - self.test_L
+                    # Check the drop-off time window
+                    if check_window(user.dropoff_window, vehicle.free_time) and user.id <= self.test_N / 2:
+>>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
                         if self.logs:
                             print('The drop-off time window of User {} is broken: {:.2f} not in {}.'.format(
                                 user.id, vehicle.free_time, user.dropoff_window))

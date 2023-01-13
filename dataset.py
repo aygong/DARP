@@ -10,9 +10,15 @@ def dataset(args):
 
     path_dataset = './dataset/'
     os.makedirs(path_dataset, exist_ok=True)
+<<<<<<< HEAD
     # shutil.rmtree(path_dataset)
     # print("Directory {} has been removed successfully".format(path_dataset))
     # os.makedirs(path_dataset)
+=======
+    #shutil.rmtree(path_dataset) 
+    #print("Directory {} has been removed successfully".format(path_dataset))
+    #os.makedirs(path_dataset)
+>>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
     data = []
     num_dataset = 1
