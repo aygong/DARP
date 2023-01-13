@@ -1,18 +1,12 @@
 from environment import *
 from transformer import Transformer
 from utils import get_device
-<<<<<<< HEAD
 
-=======
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 import os
 import time as t
 from collections import deque
 import copy
-<<<<<<< HEAD
 
-=======
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
 def evaluation(args):
     # Determine if your system supports CUDA
@@ -37,21 +31,12 @@ def evaluation(args):
 
     # Load the trained model
     model_name = darp.train_name + '-' + str(args.wait_time)
-<<<<<<< HEAD
     if args.model_type:
         model = "rl"
         print("Load the model trained by reinforcement learning.\n")
     else:
         model = "sl"
         print("Load the model trained by supervised learning.\n")
-=======
-    if args.rl_flag:
-       model = "reinforce"
-       print("Load the trained model with REINFORCE")
-    else:
-        model = "model"
-        print("Load the trained model with supervised learning")
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
     checkpoint = torch.load('./model/' + model + '-' + model_name + '.model')
     darp.model.load_state_dict(checkpoint['model_state_dict'])
@@ -78,7 +63,6 @@ def evaluation(args):
     # user_mask = torch.Tensor(user_mask).to(device)
     src_mask = torch.Tensor(src_mask).to(device)
 
-<<<<<<< HEAD
     for num_instance in range(args.num_tt_instances):
         print('--------Evaluation on Instance {}:--------'.format(num_instance + 1))
         start = t.time()
@@ -90,18 +74,6 @@ def evaluation(args):
             for darp in darps:
                 print(round(darp[0].cost(), 2), round(abs(true_cost - darp[0].cost()) / true_cost * 100, 2),
                       len(darp[0].break_window), len(set(darp[0].break_ride_time)), round(darp[0].time_penalty, 2))
-=======
-    for num_instance in range(args.num_test_instances):
-        print('--------Evaluation on instance {}--------'.format(num_instance))
-        start = t.time()
-        true_cost = darp.reset(num_instance)
-        if args.beam:
-            darps = beam_search(darp, num_instance, src_mask, args.beam)
-            print()
-            print('--------Beam results--------')
-            for darp in darps:
-                print(round(darp[0].cost(),2), round(abs(true_cost - darp[0].cost()) / true_cost * 100, 2), len(darp[0].break_window), len(set(darp[0].break_ride_time)), round(darp[0].time_penalty, 2))
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
             print()
             darp, darp_cost = beam_choose(darps)
         else:
@@ -147,11 +119,7 @@ def evaluation(args):
         print('# broken ride time: {}\n'.format(eval_ride_time[-1]))
 
     # Print the metrics on one standard instance
-<<<<<<< HEAD
     print('--------Metrics on one standard instance:--------')
-=======
-    print('--------Evaluation on one standard instance--------')
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
     print('Cost (Rist 2021): {:.2f}'.format(eval_rist_cost[0]))
     print('Cost (predicted): {:.2f}'.format(eval_pred_cost[0]))
     print('Diff. (%): {:.2f}'.format(eval_rela_diff[0]))
@@ -161,11 +129,7 @@ def evaluation(args):
     print('Run time: {:.2f}\n'.format(eval_run_time[0]))
 
     # Print the metrics on multiple random instances
-<<<<<<< HEAD
     print('--------Average metrics on {} random instances:--------'.format(args.num_tt_instances))
-=======
-    print('--------Average metrics for {} test instances:--------'.format(args.num_test_instances))
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
     print('Aver. Cost (Rist 2021): {:.2f}'.format(sum(eval_rist_cost) / len(eval_rist_cost)))
     print('Aver. Cost (predicted): {:.2f}'.format(sum(eval_pred_cost) / len(eval_pred_cost)))
     print('Aver. Diff. (%): {:.2f}'.format(sum(eval_rela_diff) / len(eval_rela_diff)))
@@ -230,11 +194,7 @@ def evaluation(args):
         output.write('\n')
 
 
-<<<<<<< HEAD
 def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
-=======
-def greedy_evaluation(darp, num_instance, src_mask, logs=True):
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
     # Run the simulator
     darp.log_probs = []
     while darp.finish():
@@ -254,27 +214,17 @@ def greedy_evaluation(darp, num_instance, src_mask, logs=True):
             darp.evaluate_step(k, action)
     return darp.cost()
 
-<<<<<<< HEAD
 
 def beam_search(darp, num_instance, src_mask, beam_width):
-=======
-def beam_search(darp, num_instance, src_mask, beam_width): 
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
     """
     Beam search algorithm for the DARP problem. Maintain 
     the best beam_width solutions at each time step and expand them to the next time step.
     WARNING: Increases running time exponentially with beam_width.
     a2-16 greedy takes ~10s while beam search with beam_width=10 takes ~1000s.
     """
-<<<<<<< HEAD
     # TODO: transpositions are possible, they need to be detected and removed from the beam
     darp.load_from_file(num_instance)
     k_best = [(darp, False, 0.0)]  # (darp, finish, sumlogprob)
-=======
-    #TODO: transpositions are possible, they need to be detected and removed from the beam
-    darp.load_from_file(num_instance)
-    k_best = [(darp, False, 0.0)] # (darp, finish, sumlogprob)
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
     # Run the simulator
     while sum([done for (env, done, score) in k_best]) < beam_width:
         k_best_new = []
@@ -316,7 +266,6 @@ def beam_search(darp, num_instance, src_mask, beam_width):
             env = copy.deepcopy(envs[i])
             env.evaluate_step(k, action)
             k_best.append((env, not env.finish(), score))
-<<<<<<< HEAD
     return k_best
 
 
@@ -324,12 +273,3 @@ def beam_choose(darps):
     idx = np.argmin([darp[0].time_penalty for darp in darps])
     darp = darps[idx]
     return darp[0], darp[0].cost()
-=======
-    return k_best 
-
-def beam_choose(darps):
-    idx = np.argmin([darp[0].time_penalty for darp in darps])
-    darp  = darps[idx]
-    return darp[0], darp[0].cost()
-    
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871

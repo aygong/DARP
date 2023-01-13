@@ -163,11 +163,7 @@ def supervision(args):
 
     print('Training finished.')
     print('Average execution time per epoch: {:.4f} seconds.'.format(np.mean(exec_times)))
-<<<<<<< HEAD
     print("Total execution time: {:.4f} seconds.\n".format(np.sum(exec_times)))
-=======
-    print("Total execution time: {:.4f} seconds.".format(np.sum(exec_times)))  
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
     fig, ax = plt.subplots()
     file_name = 'accuracy-' + name + '-' + str(args.wait_time)

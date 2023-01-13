@@ -2,11 +2,8 @@ from dataset import *
 from supervision import *
 from evaluation import *
 from reinforcement import *
-<<<<<<< HEAD
 
 import argparse
-=======
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
 
 def parse_arguments():
@@ -32,14 +29,8 @@ def parse_arguments():
     parser.add_argument('--evaluation', type=bool, default=True)
     parser.add_argument('--model_type', type=bool, default=True)  # True: RL, False: SL
     parser.add_argument('--test_index', type=int, default=8)
-<<<<<<< HEAD
     parser.add_argument('--num_tt_instances', type=int, default=100)
     parser.add_argument('--beam', type=int, default=0)
-=======
-    parser.add_argument('--num_test_instances', type=int, default=10)
-    parser.add_argument('--beam', type=int, default=0)
-    parser.add_argument('--rl_flag', type=bool, default=False)
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
     # Arguments of transformer.py
     parser.add_argument('--d_model', type=int, default=128)
@@ -50,10 +41,6 @@ def parse_arguments():
     parser.add_argument('--d_ff', type=int, default=2048)
     parser.add_argument('--dropout', type=float, default=0.1)
 
-    # Arguments of reinforcement.py
-    parser.add_argument('--reinforcement', type=bool, default=False)
-    parser.add_argument('--num_rl_instances', type=int, default=100)
-
     args = parser.parse_args()
 
     return args
@@ -61,7 +48,6 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
-<<<<<<< HEAD
 
     if bool(args.dataset):
         print("#################################################")
@@ -85,25 +71,7 @@ def main():
         print("#########################################")
         print("########## Evaluation started. ##########")
         print("#########################################\n")
-=======
-    print(args.dataset)
-    if bool(args.dataset):
-        print("Dataset generation started.")
-        dataset(args)
-
-    if bool(args.supervision):
-        print("Supervision started.")
-        supervision(args)
-
-    if bool(args.reinforcement):
-        print("Reinforcement learning started.")
-        reinforce(args)
-
-    if bool(args.evaluation):
-        print("Evaluation started.")
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
         evaluation(args)
-    
 
 
 if __name__ == '__main__':

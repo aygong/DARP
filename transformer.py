@@ -230,13 +230,6 @@ class Transformer(nn.Module):
                 user_seq.append(self.linear_duration(user_info[8 + k].unsqueeze(-1).to(self.device)))
 
             x.append(torch.stack(user_seq).permute(1, 0, 2))
-<<<<<<< HEAD
-=======
-            #user_seq = self.user_encoder(torch.stack(user_seq).permute(1, 0, 2), src_mask=user_mask)
-            #user_seq = self.user_linear(user_seq.flatten(start_dim=1))
-
-            #x.append(user_seq)
->>>>>>> 4fe9ddde9861b09c52269da309c73fdc92a6d871
 
         x = torch.stack(x, dim=1)
         x = self.user_encoder(x, src_mask=user_mask)
