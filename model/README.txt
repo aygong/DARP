@@ -1,1 +1,1 @@
-This folder contains models saved by supervision.py.
+This folder contains models saved by supervision.py and reinforcement.py.

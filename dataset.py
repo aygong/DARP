@@ -10,9 +10,9 @@ def dataset(args):
 
     path_dataset = './dataset/'
     os.makedirs(path_dataset, exist_ok=True)
-    shutil.rmtree(path_dataset)
-    print("Directory {} has been removed successfully".format(path_dataset))
-    os.makedirs(path_dataset)
+    # shutil.rmtree(path_dataset)
+    # print("Directory {} has been removed successfully".format(path_dataset))
+    # os.makedirs(path_dataset)
 
     data = []
     num_dataset = 1
@@ -40,11 +40,11 @@ def dataset(args):
 
         # Save the training sets
         print(num_dataset, num_instance + 1, sys.getsizeof(data), len(data), objective)
-        if (num_instance + 1) % args.num_train_instances == 0:
+        if (num_instance + 1) % args.num_sl_instances == 0:
             file = 'dataset-' + darp.train_name + '-' + str(num_dataset) + '.pt'
             print('Save {}.\n'.format(file))
             torch.save(data, path_dataset + file)
             data = []
             num_dataset += 1
-            if num_dataset > args.num_train_subsets:
+            if num_dataset > args.num_sl_subsets:
                 break

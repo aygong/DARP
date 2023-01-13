@@ -18,15 +18,14 @@ import torch.nn.functional as f
 def supervision(args):
     train_type, train_K, train_N, train_T, train_Q, train_L = load_instance(args.train_index, 'train')
     name = train_type + str(train_K) + '-' + str(train_N)
-
-    path_dataset = ['./dataset/' + file for file in os.listdir('./dataset')]
+    path_dataset = ['./dataset/' + file for file in os.listdir('./dataset') if file.startswith('dataset-' + name)]
     training_sets = []
     for file in path_dataset:
         print('Load', file)
         training_sets.append(torch.load(file))
+        os.remove(file)
     training_set = ConcatDataset(training_sets)
     data_size = len(training_set)
-
     path_model = './model/'
     os.makedirs(path_model, exist_ok=True)
 
@@ -53,12 +52,7 @@ def supervision(args):
 
     # Determine if your system supports CUDA
     cuda_available = torch.cuda.is_available()
-    if cuda_available:
-        print('CUDA is available. Utilize GPUs for computation.\n')
-        device = torch.device("cuda")
-    else:
-        print('CUDA is not available. Utilize CPUs for computation.\n')
-        device = torch.device("cpu")
+    device = get_device(cuda_available)
 
     model = Transformer(
         device=device,
@@ -85,6 +79,7 @@ def supervision(args):
     epochs = args.epochs
     train_performance = np.zeros(epochs)
     valid_performance = np.zeros(epochs)
+    exec_times = np.zeros(epochs)
     model_validation = True
 
     for epoch in range(epochs):
@@ -150,10 +145,11 @@ def supervision(args):
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
             'loss': criterion,
-        }, './model/' + 'model-' + model_name + '.model')
+        }, './model/' + 'sl-' + model_name + '.model')
 
         end = time.time()
         exec_time = end - start
+        exec_times[epoch] = exec_time
         print('-> Execution time for Epoch {}: {:.4f} seconds.'.format(epoch, exec_time))
         print('-> Estimated execution time remaining: {:.4f} seconds.\n'.format(exec_time * (epochs - epoch - 1)))
 
@@ -164,6 +160,10 @@ def supervision(args):
                 'estimated execution time remaining': exec_time * (epochs - epoch - 1) / 3600,
             }, file)
             file.write("\n")
+
+    print('Training finished.')
+    print('Average execution time per epoch: {:.4f} seconds.'.format(np.mean(exec_times)))
+    print("Total execution time: {:.4f} seconds.\n".format(np.sum(exec_times)))
 
     fig, ax = plt.subplots()
     file_name = 'accuracy-' + name + '-' + str(args.wait_time)

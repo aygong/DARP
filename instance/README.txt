@@ -1,1 +1,2 @@
 This folder contains instances generated at random (Cordeau 2006) and their corresponding solutions (Rist 2021).
+Download here: https://drive.google.com/drive/folders/1GVClG3nuARXL3NiJIhGjpNTI7BEk_VON?usp=sharing.

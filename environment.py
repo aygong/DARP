@@ -65,6 +65,8 @@ class Darp:
         self.mode = mode
         self.device = device
         self.model = None
+        self.logs = True
+        self.log_probs = None
 
         # Load the parameters of training instances
         self.train_type, self.train_K, self.train_N, self.train_T, self.train_Q, self.train_L = \
@@ -88,30 +90,37 @@ class Darp:
             # Set the path of test instances
             self.data_path = './instance/' + self.test_name + '-test' + '.txt'
 
-        # Read instances
+        # Load instances
         self.list_instances = []
-        with open(self.data_path, 'r') as file:
-            for instance in file:
-                self.list_instances.append(json.loads(instance))
+        self.load_from_file()
 
         # Initialize the lists of vehicles and users
         self.users = []
         self.vehicles = []
 
-        if self.mode == 'evaluate':
+        if self.mode != 'supervise':
             # Initialize the lists of metrics
             self.break_window = []
             self.break_ride_time = []
             self.break_same = []
             self.break_done = []
+            self.time_penalty = 0
+            self.indices = []  # for beam search
+            self.time = 0.0
+
+    def load_from_file(self, num_instance=None):
+        """ Load the instances from the file, in beam search we load the instances one by one """
+        if num_instance:
+            instance = self.list_instances[num_instance]
+            self.list_instances = [instance]
+        else:
+            with open(self.data_path, 'r') as file:
+                for instance in file:
+                    self.list_instances.append(json.loads(instance))
 
     def reset(self, num_instance):
+        K, N, T, Q, L = self.parameter()
         instance = self.list_instances[num_instance]
-
-        if self.mode != 'evaluate':
-            K, N, T, Q, L = [self.train_K, self.train_N, self.train_T, self.train_Q, self.train_L]
-        else:
-            K, N, T, Q, L = [self.test_K, self.test_N, self.test_T, self.test_Q, self.test_L]
 
         self.users = []
         for i in range(1, N + 1):
@@ -173,20 +182,18 @@ class Darp:
             vehicle.free_time = 1440
             self.vehicles.append(vehicle)
 
-        if self.mode == 'evaluate':
+        if self.mode != 'supervise':
             # Reinitialize the lists of metrics
             self.break_window = []
             self.break_ride_time = []
             self.break_same = []
             self.break_done = []
+            self.time_penalty = 0
 
         return instance['objective']  # noqa
 
     def beta(self, k):
-        if self.mode != 'evaluate':
-            N = self.train_N
-        else:
-            N = self.test_N
+        _, N, _, _, _ = self.parameter()
 
         for i in range(0, N):
             user = self.users[i]
@@ -342,11 +349,13 @@ class Darp:
         else:
             outputs = self.model(state, user_mask, src_mask)
 
-        _, action = torch.max(f.softmax(outputs, dim=1), 1)
+        probs = f.softmax(outputs, dim=1)
+        _, action = torch.max(probs, 1)
 
-        return action.item()
+        return action.item(), probs
 
     def evaluate_step(self, k, action):
+        K, N, T, Q, L = self.parameter()
         vehicle = self.vehicles[k]
 
         if action == self.train_N + 1:
@@ -360,30 +369,36 @@ class Darp:
 
                 if user.id not in vehicle.serving:
                     # Check the pick-up time window
-                    if check_window(user.pickup_window, vehicle.free_time) and user.id > self.test_N / 2:
-                        print('The pick-up time window of User {} is broken: {:.2f} not in {}.'.format(
-                            user.id, vehicle.free_time, user.pickup_window))
+                    if check_window(user.pickup_window, vehicle.free_time) and user.id > N / 2:
+                        if self.logs:
+                            print('The pick-up time window of User {} is broken: {:.2f} not in {}.'.format(
+                                user.id, vehicle.free_time, user.pickup_window))
                         self.break_window.append(user.id)
+                        self.time_penalty += vehicle.free_time - user.pickup_window[0]
                     # Append the user to the serving list
                     vehicle.serving.append(user.id)
                 else:
                     # Check the ride time
-                    if user.ride_time - user.serve_duration > self.test_L + 1e-2:
-                        print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
-                            user.id, user.ride_time - user.serve_duration, self.test_L))
+                    if user.ride_time - user.serve_duration > L + 1e-2:
+                        if self.logs:
+                            print('The ride time of User {} is too long: {:.2f} > {:.2f}.'.format(
+                                user.id, user.ride_time - user.serve_duration, L))
                         self.break_ride_time.append(user.id)
+                        self.time_penalty += user.ride_time - user.serve_duration - L
                     # Check the drop-off time window
-                    if check_window(user.dropoff_window, vehicle.free_time) and user.id <= self.test_N / 2:
-                        print('The drop-off time window of User {} is broken: {:.2f} not in {}.'.format(
-                            user.id, vehicle.free_time, user.dropoff_window))
+                    if check_window(user.dropoff_window, vehicle.free_time) and user.id <= N / 2:
+                        if self.logs:
+                            print('The drop-off time window of User {} is broken: {:.2f} not in {}.'.format(
+                                user.id, vehicle.free_time, user.dropoff_window))
                         self.break_window.append(user.id)
+                        self.time_penalty += vehicle.free_time - user.dropoff_window[0]
                     # Remove the user from the serving list
                     vehicle.serving.remove(user.id)
 
                 vehicle.serve_duration = user.serve_duration
                 user.ride_time = 0.0
 
-            if action < self.test_N:
+            if action < N:
                 # Move to the next node
                 user = self.users[action]
 
@@ -419,8 +434,10 @@ class Darp:
 
         if num_finish == self.train_K:
             flag = False
-            if self.mode == 'evaluate':
-                for i in range(0, self.test_N):
+            if self.mode != 'supervise':
+                _, N, _, _, _ = self.parameter()
+
+                for i in range(0, N):
                     user = self.users[i]
                     # Check if the user is served by the same vehicle.
                     if len(user.pred_served) != 2 or user.pred_served[0] != user.pred_served[1]:
@@ -437,3 +454,9 @@ class Darp:
 
     def cost(self):
         return sum(vehicle.pred_cost for vehicle in self.vehicles)
+
+    def parameter(self):
+        if self.mode != 'evaluate':
+            return self.train_K, self.train_N, self.train_T, self.train_Q, self.train_L
+        else:
+            return self.test_K, self.test_N, self.test_T, self.test_Q, self.test_L
