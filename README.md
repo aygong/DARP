@@ -2,9 +2,10 @@
 
 <div align="center">
 <p>
-<img src="instance/probstat.png" width="700"/>
+<img src="instance/probstat.png" width="600"/>
 </p>
 </div>
+
 
 
 ## Introduction
