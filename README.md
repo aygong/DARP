@@ -18,7 +18,7 @@ In this project, we introduce a Transformer-based learning framework for the Dia
 
 To reproduce our results:
 
-- Install the following packages.
+- Install the following packages: `pip install -r requirements.txt`
   - [torch](https://pytorch.org/)\>=1.12.1
   - [numpy](https://numpy.org/install/)\>=1.23.1
   - [matplotlib](https://matplotlib.org/stable/users/getting_started/)\>=3.5.2
@@ -80,6 +80,7 @@ The arguments in `main.py` is explained as follows.
 ```
 ./DARP/
 ├── README.md
+├── requirements.txt
 |
 ├── main.py                    # Start execution
 ├── utils.py                   # Collect small useful functions
