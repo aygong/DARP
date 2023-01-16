@@ -20,11 +20,11 @@ To reproduce our results:
 
 - Install the following packages.
   - [torch](https://pytorch.org/)\>=1.12.1
-  - numpy\>=1.23.1
-  - matplotlib\>=3.5.2
+  - [numpy](https://numpy.org/install/)\>=1.23.1
+  - [matplotlib](https://matplotlib.org/stable/users/getting_started/)\>=3.5.2
 
 - Clone the repository: `git clone https://github.com/aygong/DARP.git`
-- Run the script:  `main.py`
+- Run the script: `main.py`
 
 
 
