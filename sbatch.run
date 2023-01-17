@@ -10,9 +10,6 @@
 #SBATCH --qos=gpu
 #SBATCH --chdir <path to directory>
 
-module load gcc/8.4.0 python/3.7.7
-source ../venvs/darp/bin/activate
-
 python main.py \
     --dataset True \
     --train_index 0\
