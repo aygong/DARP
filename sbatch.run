@@ -1,0 +1,39 @@
+#!/bin/bash
+#SBATCH --nodes 1
+#SBATCH --ntasks 1
+#SBATCH --time 24:00:00
+#SBATCH --mem 80G
+#SBATCH --partition=gpu
+#SBATCH --account=master
+#SBATCH --job-name=darp
+#SBATCH --gres=gpu:2
+#SBATCH --qos=gpu
+#SBATCH --chdir <path to directory>
+
+module load gcc/8.4.0 python/3.7.7
+source ../venvs/darp/bin/activate
+
+python main.py \
+    --dataset True \
+    --train_index 0\
+    --num_sl_subsets 100 \
+    --num_sl_instances 100 \
+    --wait_time 7 \
+    --supervision True \
+    --batch_size 256 \
+    --epochs 15 \
+    --reinforcement True \
+    --num_rl_instances 300 \
+    --evaluation True \
+    --num_tt_instances 100 \
+    --model_type False \
+    --test_index 0 \
+    --beam 0 \
+    --d_model 128 \
+    --num_layers 4 \
+    --num_heads 8 \
+    --d_k 64 \
+    --d_v 64 \
+    --d_ff 2048 \
+    --dropout 0.1 
+

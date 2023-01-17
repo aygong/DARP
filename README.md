@@ -25,8 +25,7 @@ To reproduce our results:
 
 - Clone the repository: `git clone https://github.com/aygong/DARP.git`
 - Run the script: `main.py`
-
-
+- To run the script on SCITAS cluster, first change the chdir argument and run: `sbatch.run`
 
 ## Arguments
 
@@ -81,6 +80,7 @@ The arguments in `main.py` is explained as follows.
 ./DARP/
 ├── README.md
 ├── requirements.txt
+├── sbatch.run                 # Run on cluster
 |
 ├── main.py                    # Start execution
 ├── utils.py                   # Collect small useful functions
