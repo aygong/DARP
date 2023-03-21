@@ -273,6 +273,11 @@ class Darp:
         return action
 
     def supervise_step(self, k):
+        """
+        Simulate a step of the instance to reach a the next state.
+        Return the travel time of the transition.
+        """
+
         vehicle = self.vehicles[k]
         r = vehicle.ordinal
 
@@ -280,6 +285,7 @@ class Darp:
             # Wait at the present node
             vehicle.free_time += self.args.wait_time
             update_ride_time(vehicle, self.users, self.args.wait_time)
+            travel_time = 0.0
         else:
             wait_time = vehicle.schedule[r] - vehicle.free_time
             update_ride_time(vehicle, self.users, wait_time)
@@ -332,11 +338,14 @@ class Darp:
                 update_ride_time(vehicle, self.users, ride_time)
             else:
                 # Move to the destination depot
+                travel_time = euclidean_distance(vehicle.coords, [0.0, 0.0])
                 vehicle.coords = [0.0, 0.0]
                 vehicle.free_time = 1440
                 vehicle.serve_duration = 0
 
             vehicle.ordinal += 1
+
+        return travel_time
 
     def predict(self, state, user_mask=None, src_mask=None):
         state, _ = DataLoader([state, 0], batch_size=1)  # noqa
@@ -460,3 +469,10 @@ class Darp:
             return self.train_K, self.train_N, self.train_T, self.train_Q, self.train_L
         else:
             return self.test_K, self.test_N, self.test_T, self.test_Q, self.test_L
+    
+    def action_cost(self, k, action):
+        """
+        Returns the immediate cost of the action performed by vehicle k.
+        The cost is basically the distance between the two locations.
+        """
+        return 0

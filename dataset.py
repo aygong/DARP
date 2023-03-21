@@ -20,6 +20,7 @@ def dataset(args):
     for num_instance in range(len(darp.list_instances)):
         objective = darp.reset(num_instance)
 
+        sum_travel_times = 0
         # Run the simulator
         while darp.finish():
             free_times = [vehicle.free_time for vehicle in darp.vehicles]
@@ -33,10 +34,11 @@ def dataset(args):
 
                 darp.beta(k)
                 state = darp.state(k, time)
+                cost_to_go = objective - sum_travel_times # cost to go from this state until the end, BEFORE taking the action
                 action = darp.action(k)
-                darp.supervise_step(k)
-
-                data.append([state, action])
+                
+                sum_travel_times += darp.supervise_step(k)
+                data.append([state, action, cost_to_go])
 
         # Save the training sets
         print(num_dataset, num_instance + 1, sys.getsizeof(data), len(data), objective)
