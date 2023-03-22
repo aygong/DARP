@@ -61,7 +61,7 @@ def point_wise_feed_forward_network(d_model=512, d_ff=2048):
     return nn.Sequential(
         nn.Linear(d_model, d_ff),  # Shape: (batch_size, input_seq_len, d_ff).
         nn.ReLU(),
-        nn.Linear(d_ff, d_model),  # Shape: (batch_size, input_seq_len, d_model).
+        nn.Linear(d_ff, d_model)   # Shape: (batch_size, input_seq_len, d_model).
     )
 
 
@@ -200,8 +200,20 @@ class Transformer(nn.Module):
             dropout=dropout
         )
 
-        # Linear.
-        self.linear = nn.Linear(input_seq_len * d_model, target_seq_len)
+        # Linear for policy.
+        # self.policy = nn.Linear(input_seq_len * d_model, target_seq_len)
+        self.policy = nn.Sequential(
+            nn.Linear(input_seq_len * d_model, d_ff), 
+            nn.ReLU(),
+            nn.Linear(d_ff, target_seq_len) 
+        )
+
+        # Linear for cost-to-go.
+        self.value = nn.Sequential(
+            nn.Linear(input_seq_len * d_model, d_ff), 
+            nn.ReLU(),
+            nn.Linear(d_ff, 1) 
+        )
 
     # noinspection PyListCreation
     def forward(self, states, user_mask=None, src_mask=None):
@@ -238,6 +250,7 @@ class Transformer(nn.Module):
         x = self.encoder(x, src_mask=src_mask)  # Shape: (batch_size, input_seq_len, d_model).
 
         # Linear.
-        x = self.linear(x.flatten(start_dim=1))  # Shape: (batch_size, target_seq_len).
+        policy_output = self.policy(x.flatten(start_dim=1))  # Shape: (batch_size, target_seq_len).
+        value_output = torch.squeeze(self.value(x.flatten(start_dim=1))) # Shape: (batch_size, 1).
 
-        return x
+        return policy_output, value_output

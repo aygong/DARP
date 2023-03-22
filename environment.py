@@ -274,7 +274,7 @@ class Darp:
 
     def supervise_step(self, k):
         """
-        Simulate a step of the instance to reach a the next state.
+        Simulate a step of the instance to reach the next state.
         Return the travel time of the transition.
         """
 
@@ -354,13 +354,14 @@ class Darp:
             pred_mask = [0 if self.users[i].beta == 2 else 1 for i in range(0, self.test_N)] + \
                         [0 for _ in range(0, self.train_N - self.test_N)] + [1, 1]
             pred_mask = torch.Tensor(pred_mask).to(self.device)
-            outputs = self.model(state, user_mask, src_mask).masked_fill(pred_mask == 0, -1e6)
+            policy_outputs, value_outputs = self.model(state, user_mask, src_mask).masked_fill(pred_mask == 0, -1e6)
         else:
-            outputs = self.model(state, user_mask, src_mask)
+            policy_outputs, value_outputs = self.model(state, user_mask, src_mask)
 
-        probs = f.softmax(outputs, dim=1)
+        probs = f.softmax(policy_outputs, dim=1)
         _, action = torch.max(probs, 1)
 
+        # value outputs to also be returned in the future
         return action.item(), probs
 
     def evaluate_step(self, k, action):
@@ -470,9 +471,3 @@ class Darp:
         else:
             return self.test_K, self.test_N, self.test_T, self.test_Q, self.test_L
     
-    def action_cost(self, k, action):
-        """
-        Returns the immediate cost of the action performed by vehicle k.
-        The cost is basically the distance between the two locations.
-        """
-        return 0

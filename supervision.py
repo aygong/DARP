@@ -72,13 +72,16 @@ def supervision(args):
     if cuda_available:
         model.cuda()
 
-    criterion = nn.CrossEntropyLoss()
+    criterion_policy = nn.CrossEntropyLoss()
+    criterion_value = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
     epochs = args.epochs
-    train_performance = np.zeros(epochs)
-    valid_performance = np.zeros(epochs)
+    train_policy_performance = np.zeros(epochs)
+    train_value_performance = np.zeros(epochs)
+    valid_policy_performance = np.zeros(epochs)
+    valid_value_performance = np.zeros(epochs)
     exec_times = np.zeros(epochs)
     model_validation = True
 
@@ -89,15 +92,24 @@ def supervision(args):
         iters = 0
         model.train()
 
-        for _, (states, actions) in enumerate(train_data):
+        for _, (states, actions, values) in enumerate(train_data):
             iters += 1
             actions = actions.to(device)
+            values = values.to(device, dtype=torch.float32)
+
+            
 
             optimizer.zero_grad()
 
-            outputs = model(states)
-            loss = criterion(outputs, actions)
-
+            policy_outputs, value_outputs = model(states)
+            policy_loss = criterion_policy(policy_outputs, actions)
+            #print(f'value output size: {value_outputs.size()}, value size: {values.size()}')
+            #print(f'policy output type: {policy_outputs.dtype}, actions type: {actions.dtype}')
+            #print(f'value output type: {value_outputs.dtype}, value type: {values.dtype}')
+            value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
+            
+            loss =  policy_loss + value_loss
+            #print(f'value loss size: {value_loss.size()}, policy loss size: {policy_loss.size()}, loss size: {loss.size()}')
             loss.backward()
             optimizer.step()
 
@@ -105,17 +117,26 @@ def supervision(args):
 
             scheduler.step(running_loss)
 
-            _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
-            train_measure = (predicted == actions).sum().item() / actions.size(0)
+            _, predicted = torch.max(f.softmax(policy_outputs, dim=1), 1)
+            train_policy_measure = (predicted == actions).sum().item() / actions.size(0)
+            #print('value_outputs: ', value_outputs)
+            #print('values: ', values)
+            #print('values.size(0): ', values.size(0))
+            train_value_measure = abs(value_outputs - values).sum().item() / values.size(0)
+
             if iters % 20 == 0:
                 print('Epoch: {}.'.format(epoch),
                       'Iteration: {}.'.format(iters),
-                      'Training loss: {:.4f}.'.format(loss.item()),
-                      'Training accuracy: {:.4f}.'.format(train_measure)
+                      'Training policy loss: {:.4f}.'.format(policy_loss.item()),
+                      'Training policy accuracy: {:.4f}.'.format(train_policy_measure),
+                      'Training value loss: {:.4f}.'.format(value_loss.item()),
+                      'Training value MAE: {:.4f}.'.format(train_value_measure)
                       )
-            train_performance[epoch] = train_performance[epoch] + train_measure
+            train_policy_performance[epoch] += train_policy_measure
+            train_value_performance[epoch] += train_value_measure
 
-        train_performance[epoch] /= (iters + 1)
+        train_policy_performance[epoch] /= (iters + 1)
+        train_value_performance[epoch] /= (iters + 1)
 
         if model_validation:
             # Validation
@@ -123,28 +144,35 @@ def supervision(args):
             model.eval()
 
             with torch.no_grad():
-                valid_measure = [0, 0]
+                valid_measure = [0, 0, 0]
 
                 # Loop over batches in an epoch using valid_data
-                for _, (states, actions) in enumerate(valid_data):
+                for _, (states, actions, values) in enumerate(valid_data):
                     actions = actions.to(device)
+                    values = values.to(device)
 
-                    outputs = model(states)
-                    loss = criterion(outputs, actions)
+                    policy_outputs, value_outputs = model(states)
+                    policy_loss = criterion_policy(policy_outputs, actions)
+                    value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
+                    loss =  policy_loss + value_loss
 
-                    _, predicted = torch.max(f.softmax(outputs, dim=1), 1)
+                    _, predicted = torch.max(f.softmax(policy_outputs, dim=1), 1)
                     valid_measure[0] += (predicted == actions).sum().item()
-                    valid_measure[1] += actions.size(0)
+                    valid_measure[1] += abs(value_outputs - values).sum().item()
+                    valid_measure[2] += actions.size(0)
 
-            valid_performance[epoch] = valid_measure[0] / valid_measure[1]
-            print('Validation accuracy: {:.4f}.'.format(valid_performance[epoch]))
+            valid_policy_performance[epoch] = valid_measure[0] / valid_measure[2]
+            valid_value_performance[epoch] = valid_measure[1] / valid_measure[2]
+            print('Validation policy accuracy: {:.4f}.'.format(valid_policy_performance[epoch]))
+            print('Validation value MAE: {:.4f}.'.format(valid_value_performance[epoch]))
 
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
-            'loss': criterion,
+            'policy_loss': criterion_policy,
+            'value_loss': criterion_value,
         }, './model/' + 'sl-' + model_name + '.model')
 
         end = time.time()
@@ -165,16 +193,18 @@ def supervision(args):
     print('Average execution time per epoch: {:.4f} seconds.'.format(np.mean(exec_times)))
     print("Total execution time: {:.4f} seconds.\n".format(np.sum(exec_times)))
 
-    fig, ax = plt.subplots()
+    #fig, ax = plt.subplots()
     file_name = 'accuracy-' + name + '-' + str(args.wait_time)
-    ax.plot(np.arange(epochs), train_performance, label="Training accuracy")
-    ax.plot(np.arange(epochs), valid_performance, label="Validation accuracy")
-    ax.set_xlabel('Epoch')
-    ax.set_ylabel('Accuracy')
-    ax.set(ylim=(0, 1))
-    ax.legend()
-    plt.savefig(path_result + file_name + '.pdf')
+    #ax.plot(np.arange(epochs), train_policy_performance, label="Training accuracy")
+    #ax.plot(np.arange(epochs), valid_policy_performance, label="Validation accuracy")
+    #ax.set_xlabel('Epoch')
+    #ax.set(ylim=(0, 1))
+    #ax.legend()
+    #ax.set_ylabel('Accuracy')
+    #plt.savefig(path_result + file_name + '.pdf')
 
     with open(path_result + file_name + '.npy', 'wb') as file:
-        np.save(file, train_performance)  # noqa
-        np.save(file, valid_performance)  # noqa
+        np.save(file, train_policy_performance)  # noqa
+        np.save(file, train_value_performance)  # noqa
+        np.save(file, valid_policy_performance)  # noqa
+        np.save(file, valid_value_performance)  # noqa
