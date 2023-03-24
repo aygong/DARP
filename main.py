@@ -20,6 +20,8 @@ def parse_arguments():
     parser.add_argument('--supervision', type=bool, default=True)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--epochs', type=int, default=5)
+    parser.add_argument('--loss_ratio', type=int, default=5)
+
 
     # Arguments of reinforcement.py
     parser.add_argument('--reinforcement', type=bool, default=True)

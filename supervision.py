@@ -105,7 +105,7 @@ def supervision(args):
             policy_loss = criterion_policy(policy_outputs, actions)
             value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
             
-            loss =  policy_loss + value_loss
+            loss =  policy_loss + value_loss# * args.loss_ratio
             loss.backward()
             optimizer.step()
 
