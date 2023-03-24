@@ -354,7 +354,8 @@ class Darp:
             pred_mask = [0 if self.users[i].beta == 2 else 1 for i in range(0, self.test_N)] + \
                         [0 for _ in range(0, self.train_N - self.test_N)] + [1, 1]
             pred_mask = torch.Tensor(pred_mask).to(self.device)
-            policy_outputs, value_outputs = self.model(state, user_mask, src_mask).masked_fill(pred_mask == 0, -1e6)
+            policy_outputs, value_outputs = self.model(state, user_mask, src_mask)
+            policy_outputs = policy_outputs.masked_fill(pred_mask == 0, -1e6)
         else:
             policy_outputs, value_outputs = self.model(state, user_mask, src_mask)
 

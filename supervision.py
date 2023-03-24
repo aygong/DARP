@@ -103,13 +103,9 @@ def supervision(args):
 
             policy_outputs, value_outputs = model(states)
             policy_loss = criterion_policy(policy_outputs, actions)
-            #print(f'value output size: {value_outputs.size()}, value size: {values.size()}')
-            #print(f'policy output type: {policy_outputs.dtype}, actions type: {actions.dtype}')
-            #print(f'value output type: {value_outputs.dtype}, value type: {values.dtype}')
             value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
             
             loss =  policy_loss + value_loss
-            #print(f'value loss size: {value_loss.size()}, policy loss size: {policy_loss.size()}, loss size: {loss.size()}')
             loss.backward()
             optimizer.step()
 
@@ -119,9 +115,6 @@ def supervision(args):
 
             _, predicted = torch.max(f.softmax(policy_outputs, dim=1), 1)
             train_policy_measure = (predicted == actions).sum().item() / actions.size(0)
-            #print('value_outputs: ', value_outputs)
-            #print('values: ', values)
-            #print('values.size(0): ', values.size(0))
             train_value_measure = abs(value_outputs - values).sum().item() / values.size(0)
 
             if iters % 20 == 0:
@@ -203,8 +196,16 @@ def supervision(args):
     #ax.set_ylabel('Accuracy')
     #plt.savefig(path_result + file_name + '.pdf')
 
-    with open(path_result + file_name + '.npy', 'wb') as file:
-        np.save(file, train_policy_performance)  # noqa
-        np.save(file, train_value_performance)  # noqa
-        np.save(file, valid_policy_performance)  # noqa
-        np.save(file, valid_value_performance)  # noqa
+    #with open(path_result + file_name + '.npy', 'wb') as file:
+    #    np.save(file, train_policy_performance)  # noqa
+    #    np.save(file, train_value_performance)  # noqa
+    #    np.save(file, valid_policy_performance)  # noqa
+    #    np.save(file, valid_value_performance)  # noqa
+
+    np.savez(
+        path_result + file_name + '.npz',
+        train_policy_performance = train_policy_performance,
+        train_value_performance = train_value_performance,
+        valid_policy_performance = valid_policy_performance,
+        valid_value_performance = valid_value_performance
+        )
