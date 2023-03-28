@@ -34,8 +34,15 @@ def dataset(args):
 
                 darp.beta(k)
                 state = darp.state(k, time)
+                g = darp.state_graph(k, time)
+                #print(g.nodes())
+                #print(g.edata['feat'])
+                #print(g.number_of_edges())
+                
+                
                 cost_to_go = objective - sum_travel_times # cost to go from this state until the end, BEFORE taking the action
                 action = darp.action(k)
+                print(action)
                 
                 sum_travel_times += darp.supervise_step(k)
                 data.append([state, action, cost_to_go])

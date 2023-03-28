@@ -67,3 +67,81 @@ def node_to_user(N):
             node2user[i] = i - N
 
     return node2user
+
+def one_hot_node_type(typ):
+    if typ=='pickup':
+        return 0
+    elif typ=='dropoff':
+        return 1
+    elif typ=='wait':
+        return 2
+    elif typ=='source':
+        return 3
+    elif typ=='destination':
+        return 4
+    else:
+        raise ValueError(f'Unknown node type: {typ}.')
+    
+def is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
+    if (u and u.alpha == 2 and not k_u) or (v and v.alpha == 2 and not k_v): # already visited user
+        return False
+    if (t_u == 'pickup' and u.alpha == 1 and not k_u) or (t_v == 'pickup' and v.alpha == 1 and not k_v): # already visited pickups
+        return False
+    if (t_u == 'source' and not k_u) or (t_v == 'source' and not k_v): # empty source station
+        return False
+    if t_u == 'wait' or t_v == 'wait': # waiting node connected to every other node, CHANGE ???
+        return True
+    if k_u and k_v: # both contain vehicles
+        return False
+    
+
+    
+    if t_u == 'destination':
+        if k_v: 
+            if t_v == 'dropoff' and len(k_v.serving) <= 1: # vehicle can serve last user and leave
+                return True
+            if t_v == 'source': # Vehicle at source is empty
+                return True
+            return False
+        if t_v == 'dropoff': # connect destination to dropoffs
+            return True
+        return False
+    
+    if t_u == 'source' and k_u:
+        if t_v == 'pickup' and not k_v and k_u.free_capacity >= v.load: # connect to available pickups
+            return True
+        if t_v == 'destination':
+            return True
+        return False
+    
+    if t_u == 'pickup':
+        if k_u:
+            if t_v == 'pickup' and not k_v and k_u.free_capacity >= v.load: # connect to available pickups
+                return True
+            if t_v == 'dropoff' and not k_v: # connect to available dropoffs
+                return (v in k_u.serving or u==v)
+            return False
+        else:
+            if k_v:
+                if (t_v=='source' or t_v=='pickup' or t_v=='dropoff') and k_v.free_capacity >= u.load: # connect to source if vehicle there
+                    return True
+                return False
+            else:
+                return t_v != 'destination'
+    
+    if t_u == 'dropoff':
+        if k_u:
+            if t_v=='pickup' and k_u.free_capacity >= v.load:
+                return True
+            if t_v == 'dropoff':
+                return (v in k_u.serving)
+            if t_v == 'destination' and len(k_u.serving) <= 1:
+                return True
+            return False
+        else:
+            if k_v:
+                return (u in k_v.serving or (t_v=='pickup' and u==v))
+            else:
+                return t_v != 'source'
+            
+    raise RuntimeError('End of is_edge function without returning') # Should not happen but sanity check

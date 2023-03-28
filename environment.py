@@ -7,6 +7,8 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as f
 
+import dgl
+
 
 class User:
     def __init__(self, mode):
@@ -232,7 +234,124 @@ class Darp:
                  for user in self.users]
 
         return state
+    
+    def vehicle_present(self, u_coords):
+        for k in self.vehicles:
+            if k.coords == u_coords:
+                # Must verify that there is not twice the same coordinates for two different users
+                return k
+        return None
+    
+    def state_graph(self, k, time):
+        """
+        Construct a graph of the situation
+        Nodes: 
+        - 2 per user (pickup + dropoff)
+        - 1 source station per vehicle 
+        - 1 destination station
+        - 1 for the waiting action
+        - total = 2N+K+2.
+        Edges:
+        - each vehicle is connected to available user locations and destination station if the vehicle is empty.
+        - destination is connected to drop-off locations.
+        - already visited nodes are not connected to anything.
+        - the rest of the locations (users) are connected all together.
+        """
 
+        K, N, T, Q, L = self.parameter()
+        n_nodes = 2*N + K + 2
+        n_features = 14
+        node_features = torch.zeros(n_nodes, n_features) # input features of each node
+        node_info = [] # node info to draw edges: node number, user (if any), vehicle (if any), type (pickup, dropoff, wait, source, destination), is_next_available (true or false), coords
+        for u in self.users:
+            # pickup node
+            window = shift_window(u.pickup_window, time)
+            node_features[u.id, one_hot_node_type('pickup')] = 1    # Type of node (pickup, dropoff, wait, source, destination)
+            node_features[u.id, 5] = window[0]                      # start of window
+            node_features[u.id, 6] = window[1]                      # end of window
+            node_features[u.id, 7] = u.serve_duration               # service time
+            node_features[u.id, 8] = L - u.ride_time                # remaining ride time
+            k_pres = self.vehicle_present(u.pickup_coords)          # check whether the is a vehicle on that node
+            if k_pres:
+                node_features[u.id, 9] = 1                          # vehicle present
+                node_features[u.id, 10] = k_pres.free_capacity      # free capacity
+                node_features[u.id, 11] = k_pres.free_time          # next available time
+                node_features[u.id, 12] = T                         # Remaining route duration ??? TO CHANGE
+                if k == k_pres.id:
+                    node_features[u.id, 13] = 1                     # is next available
+            
+            node_info.append((u.id, u, k_pres, 'pickup', (k_pres and k_pres.id==k), u.pickup_coords))
+
+            # dropoff node
+            window = shift_window(u.dropoff_window, time)
+            node_features[u.id+N, one_hot_node_type('dropoff')] = 1   # Type of node (pickup, dropoff, wait, source, destination)
+            node_features[u.id+N, 5] = window[0]                      # start of window
+            node_features[u.id+N, 6] = window[1]                      # end of window
+            node_features[u.id+N, 7] = u.serve_duration               # service time
+            node_features[u.id+N, 8] = L - u.ride_time                # remaining ride time
+            k_pres = self.vehicle_present(u.dropoff_coords)           # check whether the is a vehicle on that node
+            if k_pres:
+                node_features[u.id+N, 9] = 1                          # vehicle present
+                node_features[u.id+N, 10] = k_pres.free_capacity      # free capacity
+                node_features[u.id+N, 11] = k_pres.free_time          # next available time
+                node_features[u.id+N, 12] = T                         # Remaining route duration ??? TO CHANGE
+                if k == k_pres.id:
+                    node_features[u.id+N, 13] = 1                     # is next available
+
+            node_info.append((u.id+N, u, k_pres, 'dropoff', (k_pres and k_pres.id==k), u.dropoff_coords))
+
+        # Destination node
+        node_features[2*N + 1, one_hot_node_type('destination')] = 1
+        node_info.append((2*N+1, None, None, 'destination', False, [0.0, 0.0]))
+
+        # Waiting node
+        node_features[0, one_hot_node_type('wait')] = 1
+        node_info.append((0, None, None, 'wait', False, self.vehicles[k].coords))
+
+        # Source nodes, one for each vehicle
+        for k_v in self.vehicles:
+            node_features[2*N + 2 + k_v.id, one_hot_node_type('source')] = 1
+            v_pres = None
+            if k_v.ordinal == 0: # if vehicle still at source station
+                v_pres = k_v
+                node_features[2*N + 2 + k_v.id, 9] = 1
+                node_features[2*N + 2 + k_v.id, 10] = k_v.free_capacity
+                node_features[2*N + 2 + k_v.id, 11] = k_v.free_time
+                node_features[2*N + 2 + k_v.id, 12] = T
+                if k == k_v.id:
+                    node_features[2*N + 2 + k_v.id, 13] = 1
+
+            node_info.append((2*N+2+k_v.id, None, v_pres, 'source', k_v.id == k, [0.0, 0.0]))
+
+        # Create a DGL Graph
+        g = dgl.DGLGraph()
+        g.add_nodes(n_nodes)
+        g.ndata['feat'] = node_features#.float()
+
+        # edges
+        edges = {
+            'src':[],
+            'dst':[],
+            'feat':[]
+        }
+        for i, (i_u, u, k_u, t_u, u_next, u_coords) in enumerate(node_info):
+            for (i_v, v, k_v, t_v, v_next, v_coords) in node_info[i+1:]:
+                if is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
+                    pairing = 1 if (u and u==v) else 0
+                    edge_feat = torch.tensor([euclidean_distance(u_coords, v_coords), pairing])
+                    #g.add_edges(i_u, i_v, data={'feat':edge_feat})
+                    edges['src'].append(i_u)
+                    edges['dst'].append(i_v)
+                    edges['feat'].append(edge_feat)
+                    
+        g.add_edges(edges['src'], edges['dst'], data={'feat':torch.stack(edges['feat'])})
+        
+        g = dgl.add_reverse_edges(g, copy_ndata=True, copy_edata=True)
+       
+        return g
+    
+    
+    
     # noinspection PyMethodMayBeStatic
     def will_pick_up(self, vehicle, user):
         travel_time = euclidean_distance(vehicle.coords, user.pickup_coords)
