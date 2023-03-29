@@ -14,6 +14,8 @@ from torch.utils.data import ConcatDataset, SubsetRandomSampler, DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn.functional as f
 
+from graph_transformer import GraphTransformerNet
+
 
 def supervision(args):
     train_type, train_K, train_N, train_T, train_Q, train_L = load_instance(args.train_index, 'train')
@@ -54,7 +56,7 @@ def supervision(args):
     cuda_available = torch.cuda.is_available()
     device = get_device(cuda_available)
 
-    model = Transformer(
+    """model = Transformer(
         device=device,
         num_vehicles=train_K,
         input_seq_len=train_N,
@@ -65,7 +67,17 @@ def supervision(args):
         d_k=args.d_k,
         d_v=args.d_v,
         d_ff=args.d_ff,
-        dropout=args.dropout)
+        dropout=args.dropout)"""
+    
+    model = GraphTransformerNet(
+        device=device,
+        num_node_feat=14,
+        num_edge_feat=2,
+        d_model=args.d_model,
+        num_layers=args.num_layers,
+        num_heads=args.num_heads,
+        dropout=args.dropout
+    )
 
     model_name = name + '-' + str(args.wait_time)
 
@@ -92,18 +104,17 @@ def supervision(args):
         iters = 0
         model.train()
 
-        for _, (states, actions, values) in enumerate(train_data):
+        for _, (states, ks, actions, values) in enumerate(train_data):
             iters += 1
+            ks = ks.to(device)
             actions = actions.to(device)
             values = values.to(device, dtype=torch.float32)
 
-            
-
             optimizer.zero_grad()
 
-            policy_outputs, value_outputs = model(states)
+            policy_outputs, value_outputs = model(states, )
             policy_loss = criterion_policy(policy_outputs, actions)
-            value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
+            value_loss = 0#criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
             
             loss =  policy_loss + value_loss * args.loss_ratio
             loss.backward()

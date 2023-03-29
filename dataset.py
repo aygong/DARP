@@ -33,19 +33,26 @@ def dataset(args):
                     continue
 
                 darp.beta(k)
-                state = darp.state(k, time)
-                g = darp.state_graph(k, time)
-                #print(g.nodes())
-                #print(g.edata['feat'])
-                #print(g.number_of_edges())
+                #state = darp.state(k, time)
+                state, next_vehicle_node = darp.state_graph(k, time)
                 
                 
                 cost_to_go = objective - sum_travel_times # cost to go from this state until the end, BEFORE taking the action
                 action = darp.action(k)
-                print(action)
+                if darp.action2node(action) not in state.successors(next_vehicle_node):
+                    #print((state.edges()[0]).tolist())
+                    #print((state.edges()[1]).tolist())
+                    print(state.successors(next_vehicle_node))
+                    print(state.ndata['feat'][next_vehicle_node])
+                    print(state.ndata['feat'][darp.action2node(action)])
+                    print(next_vehicle_node)
+                    print(action)
+                    print(darp.action2node(action))
+                    raise ValueError('Error in graph creation: vehicle cannot perform best action.')
+                #print(action)
                 
                 sum_travel_times += darp.supervise_step(k)
-                data.append([state, action, cost_to_go])
+                data.append([state, next_vehicle_node, darp.action2node(action), cost_to_go])
 
         # Save the training sets
         print(num_dataset, num_instance + 1, sys.getsizeof(data), len(data), objective)

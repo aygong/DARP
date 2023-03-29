@@ -1,5 +1,6 @@
 import math
 import torch
+import dgl
 
 parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
               ['1', 'a', 2, 20, 600, 3, 30],  # 1
@@ -145,3 +146,14 @@ def is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
                 return t_v != 'source'
             
     raise RuntimeError('End of is_edge function without returning') # Should not happen but sanity check
+
+# form a mini batch from a given list of samples = [(graph, vehicle_id, action, value) pairs]
+def collate(samples):
+    # The input samples is a list of pairs (graph, vehicle_id, action, value).
+    graphs, ks, actions, values = map(list, zip(*samples))
+    ks = torch.tensor(ks).long()
+    actions = torch.tensor(actions).long()
+    values = torch.tensor(values)
+    batched_graph = dgl.batch(graphs)
+
+    return batched_graph, ks, actions, values

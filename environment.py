@@ -257,12 +257,13 @@ class Darp:
         - already visited nodes are not connected to anything.
         - the rest of the locations (users) are connected all together.
         """
-
-        K, N, T, Q, L = self.parameter()
+        _, _, T, _, L = self.parameter()
+        K, N = self.train_K, self.train_N
         n_nodes = 2*N + K + 2
         n_features = 14
         node_features = torch.zeros(n_nodes, n_features) # input features of each node
         node_info = [] # node info to draw edges: node number, user (if any), vehicle (if any), type (pickup, dropoff, wait, source, destination), is_next_available (true or false), coords
+        next_vehicle_node = -1 # node conatining the vehicle that will perform an action
         for u in self.users:
             # pickup node
             window = shift_window(u.pickup_window, time)
@@ -279,6 +280,7 @@ class Darp:
                 node_features[u.id, 12] = T                         # Remaining route duration ??? TO CHANGE
                 if k == k_pres.id:
                     node_features[u.id, 13] = 1                     # is next available
+                    next_vehicle_node = u.id
             
             node_info.append((u.id, u, k_pres, 'pickup', (k_pres and k_pres.id==k), u.pickup_coords))
 
@@ -297,6 +299,7 @@ class Darp:
                 node_features[u.id+N, 12] = T                         # Remaining route duration ??? TO CHANGE
                 if k == k_pres.id:
                     node_features[u.id+N, 13] = 1                     # is next available
+                    next_vehicle_node = u.id+N
 
             node_info.append((u.id+N, u, k_pres, 'dropoff', (k_pres and k_pres.id==k), u.dropoff_coords))
 
@@ -320,6 +323,7 @@ class Darp:
                 node_features[2*N + 2 + k_v.id, 12] = T
                 if k == k_v.id:
                     node_features[2*N + 2 + k_v.id, 13] = 1
+                    next_vehicle_node = 2*N + 2 + k_v.id
 
             node_info.append((2*N+2+k_v.id, None, v_pres, 'source', k_v.id == k, [0.0, 0.0]))
 
@@ -343,13 +347,42 @@ class Darp:
                     edges['src'].append(i_u)
                     edges['dst'].append(i_v)
                     edges['feat'].append(edge_feat)
-                    
+
         g.add_edges(edges['src'], edges['dst'], data={'feat':torch.stack(edges['feat'])})
         
         g = dgl.add_reverse_edges(g, copy_ndata=True, copy_edata=True)
-       
-        return g
+        if next_vehicle_node == -1:
+            raise ValueError('No node found for next vehicle')
+        return g, next_vehicle_node
     
+    def action2node(self, action):
+        """
+        given an action, returns the corresponding node in the sate graph
+        """
+        if action < self.train_N: # user
+            if self.users[action].alpha == 0:
+                return action+1 # pickup
+            else:
+                return (action+1)*2 # dropoff
+        elif action == self.train_N: # destination
+            return 2*self.train_N + 1
+        elif action == self.train_N + 1: # wait
+            return 0
+        else:
+            raise RuntimeError('Action not recognized')
+    
+    def node2action(self, node):
+        """
+        given an node in the state graph, returns the corresponding action
+        """
+        if node == 0: # wait
+            return self.train_N + 1
+        elif node <= 2*self.train_N: # user
+            return ((node-1) % self.train_N)
+        elif node == 2*self.train_N + 1: # destination
+            return self.train_N
+        else:
+            raise RuntimeError('Action not recognized')
     
     
     # noinspection PyMethodMayBeStatic
