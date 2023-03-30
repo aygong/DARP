@@ -10,7 +10,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     # Arguments of dataset.py
-    parser.add_argument('--dataset', type=bool, default=True)
+    parser.add_argument('--dataset', type=bool, default=False)
     parser.add_argument('--train_index', type=int, default=9)
     parser.add_argument('--num_sl_subsets', type=int, default=1)
     parser.add_argument('--num_sl_instances', type=int, default=500)
@@ -19,7 +19,7 @@ def parse_arguments():
     # Arguments of supervision.py
     parser.add_argument('--supervision', type=bool, default=False)
     parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--epochs', type=int, default=5)
+    parser.add_argument('--epochs', type=int, default=1)
     parser.add_argument('--loss_ratio', type=int, default=1)
 
 
@@ -28,9 +28,9 @@ def parse_arguments():
     parser.add_argument('--num_rl_instances', type=int, default=5)
 
     # Arguments of evaluation.py
-    parser.add_argument('--evaluation', type=bool, default=False)
-    parser.add_argument('--model_type', type=bool, default=True)  # True: RL, False: SL
-    parser.add_argument('--test_index', type=int, default=8)
+    parser.add_argument('--evaluation', type=bool, default=True)
+    parser.add_argument('--model_type', type=bool, default=False)  # True: RL, False: SL
+    parser.add_argument('--test_index', type=int, default=9)
     parser.add_argument('--num_tt_instances', type=int, default=100)
     parser.add_argument('--beam', type=int, default=0)
 

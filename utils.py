@@ -120,7 +120,7 @@ def is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
             if t_v == 'pickup' and not k_v and k_u.free_capacity >= v.load: # connect to available pickups
                 return True
             if t_v == 'dropoff' and not k_v: # connect to available dropoffs
-                return (v in k_u.serving or u==v)
+                return (v.id in k_u.serving or u==v)
             return False
         else:
             if k_v:
@@ -135,13 +135,13 @@ def is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
             if t_v=='pickup' and k_u.free_capacity >= v.load:
                 return True
             if t_v == 'dropoff':
-                return (v in k_u.serving)
+                return (v.id in k_u.serving)
             if t_v == 'destination' and len(k_u.serving) <= 1:
                 return True
             return False
         else:
             if k_v:
-                return (u in k_v.serving or (t_v=='pickup' and u==v))
+                return (u.id in k_v.serving or (t_v=='pickup' and u==v))
             else:
                 return t_v != 'source'
             

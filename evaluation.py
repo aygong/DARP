@@ -7,6 +7,7 @@ import time as t
 from collections import deque
 import copy
 
+from graph_transformer import GraphTransformerNet
 
 def evaluation(args):
     # Determine if your system supports CUDA
@@ -16,7 +17,7 @@ def evaluation(args):
     darp = Darp(args, mode='evaluate', device=device)
 
     # Create a model
-    darp.model = Transformer(
+    """darp.model = Transformer(
         device=device,
         num_vehicles=darp.train_K,
         input_seq_len=darp.train_N,
@@ -27,7 +28,18 @@ def evaluation(args):
         d_k=args.d_k,
         d_v=args.d_v,
         d_ff=args.d_ff,
-        dropout=args.dropout)
+        dropout=args.dropout)"""
+    
+    darp.model = GraphTransformerNet(
+        device=device,
+        num_nodes=2*darp.train_N + darp.train_K + 2,
+        num_node_feat=15,
+        num_edge_feat=2,
+        d_model=128,
+        num_layers=4,
+        num_heads=8,
+        dropout=0.1
+    )
 
     # Load the trained model
     model_name = darp.train_name + '-' + str(args.wait_time)
@@ -208,10 +220,14 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
                 continue
 
             darp.beta(k)
-            state = darp.state(k, time)
-            action, probs = darp.predict(state, user_mask=None, src_mask=src_mask)
+            #state = darp.state(k, time)
+            state, next_vehicle_node = darp.state_graph(k, time)
+            action_node, probs = darp.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
+            action = darp.node2action(action_node)
             darp.log_probs.append(torch.log(probs.squeeze(0)[action]))
             darp.evaluate_step(k, action)
+            print(f'action: {action}, remaining vehicles: {[k.coords for k in darp.vehicles]}')
+            print(f'users not done: {[u.alpha for u in darp.users]}')
     return darp.cost()
 
 
@@ -245,13 +261,15 @@ def beam_search(darp, num_instance, src_mask, beam_width):
                         continue
 
                     env.beta(k)
-                    state = env.state(k, env.time)
-                    action, outputs = env.predict(state, user_mask=None, src_mask=src_mask)
+                    #state = env.state(k, env.time)
+                    state, next_vehicle_node = env.state_graph(k, env.time)
+                    #action, outputs = env.predict(state, user_mask=None, src_mask=src_mask)
+                    action_node, probs = env.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
                     if action == env.train_N + 1:
                         env.evaluate_step(k, action)
                     else:
                         waiting = False
-                log_probs, actions = torch.topk(torch.log(outputs.squeeze(0)[:-1]), min(beam_width, darp.train_N))
+                log_probs, actions = torch.topk(torch.log(probs.squeeze(0)[:-1]), min(beam_width, darp.train_N))
                 envs[i] = env
                 for log_prob, action in zip(log_probs, actions):
                     # expand each current candidate

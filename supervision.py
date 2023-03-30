@@ -25,7 +25,7 @@ def supervision(args):
     for file in path_dataset:
         print('Load', file)
         training_sets.append(torch.load(file))
-        os.remove(file)
+        #os.remove(file)
     training_set = ConcatDataset(training_sets)
     data_size = len(training_set)
     path_model = './model/'
@@ -49,8 +49,8 @@ def supervision(args):
         np.random.shuffle(valid_indices)
     train_sampler = SubsetRandomSampler(train_indices)
     valid_sampler = SubsetRandomSampler(valid_indices)
-    train_data = DataLoader(training_set, batch_size=args.batch_size, sampler=train_sampler)
-    valid_data = DataLoader(training_set, batch_size=args.batch_size, sampler=valid_sampler)
+    train_data = DataLoader(training_set, batch_size=args.batch_size, sampler=train_sampler, collate_fn=collate)
+    valid_data = DataLoader(training_set, batch_size=args.batch_size, sampler=valid_sampler, collate_fn=collate)
 
     # Determine if your system supports CUDA
     cuda_available = torch.cuda.is_available()
@@ -71,12 +71,13 @@ def supervision(args):
     
     model = GraphTransformerNet(
         device=device,
-        num_node_feat=14,
+        num_nodes=2*train_N + train_K + 2,
+        num_node_feat=15,
         num_edge_feat=2,
-        d_model=args.d_model,
-        num_layers=args.num_layers,
-        num_heads=args.num_heads,
-        dropout=args.dropout
+        d_model=128,
+        num_layers=4,
+        num_heads=8,
+        dropout=0.1
     )
 
     model_name = name + '-' + str(args.wait_time)
@@ -86,7 +87,7 @@ def supervision(args):
 
     criterion_policy = nn.CrossEntropyLoss()
     criterion_value = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
     epochs = args.epochs
@@ -104,16 +105,19 @@ def supervision(args):
         iters = 0
         model.train()
 
-        for _, (states, ks, actions, values) in enumerate(train_data):
+        for _, (graphs, ks, action_nodes, values) in enumerate(train_data):
             iters += 1
             ks = ks.to(device)
-            actions = actions.to(device)
+            action_nodes = action_nodes.to(device)
             values = values.to(device, dtype=torch.float32)
+            graphs = graphs.to(device)
+            batch_x = graphs.ndata['feat'].to(device)
+            batch_e = graphs.edata['feat'].to(device)
 
             optimizer.zero_grad()
 
-            policy_outputs, value_outputs = model(states, )
-            policy_loss = criterion_policy(policy_outputs, actions)
+            policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, masking=True)
+            policy_loss = criterion_policy(policy_outputs, action_nodes)
             value_loss = 0#criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
             
             loss =  policy_loss + value_loss * args.loss_ratio
@@ -125,16 +129,16 @@ def supervision(args):
             scheduler.step(running_loss)
 
             _, predicted = torch.max(f.softmax(policy_outputs, dim=1), 1)
-            train_policy_measure = (predicted == actions).sum().item() / actions.size(0)
+            train_policy_measure = (predicted == action_nodes).sum().item() / action_nodes.size(0)
             train_value_measure = abs(value_outputs - values).sum().item() / values.size(0)
 
             if iters % 20 == 0:
                 print('Epoch: {}.'.format(epoch),
                       'Iteration: {}.'.format(iters),
                       'Training policy loss: {:.4f}.'.format(policy_loss.item()),
-                      'Training policy accuracy: {:.4f}.'.format(train_policy_measure),
-                      'Training value loss: {:.4f}.'.format(value_loss.item()),
-                      'Training value MAE: {:.4f}.'.format(train_value_measure)
+                      'Training policy accuracy: {:.4f}.'.format(train_policy_measure)#,
+                      #'Training value loss: {:.4f}.'.format(value_loss.item()),
+                      #'Training value MAE: {:.4f}.'.format(train_value_measure)
                       )
             train_policy_performance[epoch] += train_policy_measure
             train_value_performance[epoch] += train_value_measure
@@ -151,32 +155,36 @@ def supervision(args):
                 valid_measure = [0, 0, 0]
 
                 # Loop over batches in an epoch using valid_data
-                for _, (states, actions, values) in enumerate(valid_data):
-                    actions = actions.to(device)
-                    values = values.to(device)
+                for _, (graphs, ks, action_nodes, values) in enumerate(valid_data):
+                    ks = ks.to(device)
+                    action_nodes = action_nodes.to(device)
+                    values = values.to(device, dtype=torch.float32)
+                    graphs = graphs.to(device)
+                    batch_x = graphs.ndata['feat'].to(device)
+                    batch_e = graphs.edata['feat'].to(device)
 
-                    policy_outputs, value_outputs = model(states)
-                    policy_loss = criterion_policy(policy_outputs, actions)
-                    value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
-                    loss =  policy_loss + value_loss
+                    policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, masking=True)
+                    policy_loss = criterion_policy(policy_outputs, action_nodes)
+                    value_loss = 0#criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
+                    loss =  policy_loss + value_loss * args.loss_ratio
 
                     _, predicted = torch.max(f.softmax(policy_outputs, dim=1), 1)
-                    valid_measure[0] += (predicted == actions).sum().item()
+                    valid_measure[0] += (predicted == action_nodes).sum().item()
                     valid_measure[1] += abs(value_outputs - values).sum().item()
-                    valid_measure[2] += actions.size(0)
+                    valid_measure[2] += action_nodes.size(0)
 
             valid_policy_performance[epoch] = valid_measure[0] / valid_measure[2]
             valid_value_performance[epoch] = valid_measure[1] / valid_measure[2]
             print('Validation policy accuracy: {:.4f}.'.format(valid_policy_performance[epoch]))
-            print('Validation value MAE: {:.4f}.'.format(valid_value_performance[epoch]))
+            #print('Validation value MAE: {:.4f}.'.format(valid_value_performance[epoch]))
 
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
-            'policy_loss': criterion_policy,
-            'value_loss': criterion_value,
+            'policy_loss': criterion_policy#,
+            #'value_loss': criterion_value,
         }, './model/' + 'sl-' + model_name + '.model')
 
         end = time.time()

@@ -83,7 +83,7 @@ class GraphTransformerNet(nn.Module):
             nn.Linear(d_last_ff, 1) 
         )      
         
-    def forward(self, g, h, e, vehicle_node_id, batch_size, h_lap_pos_enc=None, masking=False):
+    def forward(self, g, h, e, vehicle_node_id, h_lap_pos_enc=None, masking=False):
 
         # input embedding
         h = self.embedding_h(h)
@@ -115,10 +115,11 @@ class GraphTransformerNet(nn.Module):
         #    pairs.append(pair)
 
         #pairs = torch.stack(pairs, dim=1)
+        batch_size = len(vehicle_node_id)
         vehicle_node_id = torch.tensor([i*self.num_nodes + k for i,k in enumerate(vehicle_node_id)])
         ks = vehicle_node_id.repeat_interleave(self.num_nodes).long()
         pairs = torch.cat([h[ks], h], dim=1)
-        print(h[ks].size(), h.size())
+        #print(h[ks].size(), h.size())
         policy = torch.squeeze(self.MLP_layer(pairs))
         
         #print(policy.size())
@@ -133,11 +134,11 @@ class GraphTransformerNet(nn.Module):
 
         policy = torch.reshape(policy, (batch_size, self.num_nodes))
 
-        print('ks: ', vehicle_node_id)
-        print('0 neighbors: ', g.successors(vehicle_node_id[0]))
-        print(policy[0,:])
-        print('10 neighbors: ', g.successors(vehicle_node_id[10]))
-        print(policy[10,:])
+        #print('ks: ', vehicle_node_id)
+        #print('0 neighbors: ', g.successors(vehicle_node_id[0]))
+        #print(policy[0,:])
+        #print('10 neighbors: ', g.successors(vehicle_node_id[10]))
+        #print(policy[10,:])
         #print(h[0])
 
         # also return value
