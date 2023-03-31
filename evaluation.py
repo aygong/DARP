@@ -34,7 +34,7 @@ def evaluation(args):
         device=device,
         num_nodes=2*darp.train_N + darp.train_K + 2,
         num_node_feat=15,
-        num_edge_feat=2,
+        num_edge_feat=3,
         d_model=128,
         num_layers=4,
         num_heads=8,
@@ -265,6 +265,7 @@ def beam_search(darp, num_instance, src_mask, beam_width):
                     state, next_vehicle_node = env.state_graph(k, env.time)
                     #action, outputs = env.predict(state, user_mask=None, src_mask=src_mask)
                     action_node, probs = env.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
+                    action = env.node2action(action_node)
                     if action == env.train_N + 1:
                         env.evaluate_step(k, action)
                     else:

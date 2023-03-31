@@ -275,7 +275,7 @@ class Darp:
             node_features[u.id, 9] = u.load                         # user load
             k_pres = self.vehicle_present(u.pickup_coords)          # check whether the is a vehicle on that node
             if k_pres:
-                node_features[u.id, 10] = 1                          # vehicle present
+                node_features[u.id, 10] = 1                         # vehicle present
                 node_features[u.id, 11] = k_pres.free_capacity      # free capacity
                 node_features[u.id, 12] = k_pres.free_time          # next available time
                 node_features[u.id, 13] = T                         # Remaining route duration ??? TO CHANGE
@@ -332,7 +332,7 @@ class Darp:
         # Create a DGL Graph
         g = dgl.DGLGraph()
         g.add_nodes(n_nodes)
-        g.ndata['feat'] = node_features#.float()
+        g.ndata['feat'] = node_features
 
         # edges
         edges = {
@@ -344,7 +344,8 @@ class Darp:
             for (i_v, v, k_v, t_v, v_next, v_coords) in node_info[i+1:]:
                 if is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
                     pairing = 1 if (u and u==v) else 0
-                    edge_feat = torch.tensor([euclidean_distance(u_coords, v_coords), pairing])
+                    waiting = 1 if (t_u=='wait' or t_v=='wait') else 0
+                    edge_feat = torch.tensor([euclidean_distance(u_coords, v_coords), pairing, waiting])
                     #g.add_edges(i_u, i_v, data={'feat':edge_feat})
                     edges['src'].append(i_u)
                     edges['dst'].append(i_v)

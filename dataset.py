@@ -56,6 +56,19 @@ def dataset(args):
                 #print(action)
                 
                 sum_travel_times += darp.supervise_step(k)
+
+                #print(f'vehicle id: {k}, vehicle node: {next_vehicle_node}')
+                #print('vehicle state: ', state.ndata['feat'][next_vehicle_node])
+                #print('vehicle neighbors: ', state.successors(next_vehicle_node))
+                
+                #print(f'time: {time}')
+                #print(f'action: {action}, action_node: {node}')
+                #print('users alphas: ', [u.alpha for u in darp.users])
+                #print('users ids: ', [u.id for u in darp.users])
+                #print(len(state.successors(0)))
+                #print('-'*30)
+
+
                 data.append([state, next_vehicle_node, node, cost_to_go])
 
         # Save the training sets

@@ -73,7 +73,7 @@ def supervision(args):
         device=device,
         num_nodes=2*train_N + train_K + 2,
         num_node_feat=15,
-        num_edge_feat=2,
+        num_edge_feat=3,
         d_model=128,
         num_layers=4,
         num_heads=8,

@@ -17,7 +17,7 @@ def parse_arguments():
     parser.add_argument('--wait_time', type=int, default=7)
 
     # Arguments of supervision.py
-    parser.add_argument('--supervision', type=bool, default=False)
+    parser.add_argument('--supervision', type=bool, default=True)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--epochs', type=int, default=1)
     parser.add_argument('--loss_ratio', type=int, default=1)
