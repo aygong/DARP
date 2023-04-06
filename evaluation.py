@@ -33,7 +33,7 @@ def evaluation(args):
     darp.model = GraphTransformerNet(
         device=device,
         num_nodes=2*darp.train_N + darp.train_K + 2,
-        num_node_feat=15,
+        num_node_feat=17,
         num_edge_feat=3,
         d_model=128,
         num_layers=4,
@@ -226,8 +226,8 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
             action = darp.node2action(action_node)
             darp.log_probs.append(torch.log(probs.squeeze(0)[action]))
             darp.evaluate_step(k, action)
-            print(f'action: {action}, remaining vehicles: {[k.coords for k in darp.vehicles]}')
-            print(f'users not done: {[u.alpha for u in darp.users]}')
+            #print(f'action: {action}, remaining vehicles: {[k.coords for k in darp.vehicles]}')
+            #print(f'users not done: {[u.alpha for u in darp.users]}')
     return darp.cost()
 
 
@@ -239,56 +239,96 @@ def beam_search(darp, num_instance, src_mask, beam_width):
     a2-16 greedy takes ~10s while beam search with beam_width=10 takes ~1000s.
     """
     # TODO: transpositions are possible, they need to be detected and removed from the beam
-    darp.load_from_file(num_instance)
-    k_best = [(darp, False, 0.0)]  # (darp, finish, sumlogprob)
+    #darp.load_from_file(num_instance)
+    k_best = [(darp, False, 0.0, 0)]  # (darp, finish, sumlogprob, n_broken_constraints)
     # Run the simulator
-    while sum([done for (env, done, score) in k_best]) < beam_width:
+    while sum([done for (env, done, score, n_broken) in k_best]) < beam_width:
+        #print('dones: ', [done for (env, done, score, n_broken) in k_best])
         k_best_new = []
         envs = {}
-        for i, (env, done, score) in enumerate(k_best):
+        i = 0
+        for env, done, score, n_broken in k_best:
             if not done:
                 waiting = True
+                waited_too_much = False
+                wait_count_per_vehicle = np.zeros(len(env.vehicles))
                 while waiting:
-                    if not env.indices:
-                        free_times = [vehicle.free_time for vehicle in env.vehicles]
-                        time = np.min(free_times)
-                        indices = np.argwhere(free_times == time)
-                        env.indices = deque(indices.flatten().tolist())
-                        env.time = time
+                    #if not env.indices:
+                    #    free_times = [vehicle.free_time for vehicle in env.vehicles]
+                    #    time = np.min(free_times)
+                    #    indices = np.argwhere(free_times == time)
+                    #    env.indices = deque(indices.flatten().tolist())
+                    #    env.time = time
+                    free_times = [vehicle.free_time for vehicle in env.vehicles]
+                    time = np.min(free_times)
+                    indices = np.argwhere(free_times == time)
+                    indices = indices.flatten().tolist()
 
-                    k = env.indices.popleft()
+                    #k = indices.popleft()
+                    #if env.vehicles[k].free_time == 1440:
+                    #    continue
+                    k = indices[0]
                     if env.vehicles[k].free_time == 1440:
-                        continue
+                        if sum(wait_count_per_vehicle) > 0:
+                            waited_too_much = True
+                            break
+                        else:
+                            raise RuntimeError(f'Environment should be done if next free time is 1440, free_times: {free_times}, wait_count: {wait_count_per_vehicle}')
 
                     env.beta(k)
                     #state = env.state(k, env.time)
-                    state, next_vehicle_node = env.state_graph(k, env.time)
+                    state, next_vehicle_node = env.state_graph(k, time)
                     #action, outputs = env.predict(state, user_mask=None, src_mask=src_mask)
                     action_node, probs = env.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
                     action = env.node2action(action_node)
-                    if action == env.train_N + 1:
+                    #print(f'action: {action}')#, probs: {probs}')
+                    #print(f'free times: {free_times}, env time: {time}')
+                    #print(f'neighbors: {state.successors(next_vehicle_node)}')
+                    if action == env.train_N + 1: # Waiting action
+                        #print(f'waiting: {wait_count_per_vehicle[k]}, free_times: {free_times}')
+                        if wait_count_per_vehicle[k] == 0:
+                            # Save other actions to keep possibility of not waiting
+                            log_probs, other_action_nodes = torch.topk(torch.log(probs.squeeze(0)[1:]), min(beam_width, len(state.successors(next_vehicle_node))-1)) # -1 to not take into account waiting node
+                            envs[i] = copy.deepcopy(env)
+                            for log_prob, other_action_node in zip(log_probs, other_action_nodes):
+                                other_action_node += 1 # Shift because we removed waiting action
+                                if other_action_node not in state.successors(next_vehicle_node):
+                                    print(f'ACTION NODE {other_action_node} NOT IN NEIGHBORS: {state.successors(next_vehicle_node)}, LOG_PROB: {log_prob}')
+                                # expand each current candidate
+                                other_action = env.node2action(other_action_node)
+                                k_best_new.append((i, score - log_prob.item(), k, other_action.item(), n_broken))
+                            i += 1
                         env.evaluate_step(k, action)
+                        wait_count_per_vehicle[k] += 1
                     else:
                         waiting = False
-                log_probs, actions = torch.topk(torch.log(probs.squeeze(0)[:-1]), min(beam_width, darp.train_N))
-                envs[i] = env
-                for log_prob, action in zip(log_probs, actions):
-                    # expand each current candidate
-                    k_best_new.append((i, score - log_prob.item(), k, action.item()))
+                if not waited_too_much:
+                    log_probs, action_nodes = torch.topk(torch.log(probs.squeeze(0)[1:]), min(beam_width, len(state.successors(next_vehicle_node))-1)) # -1 to not take into account waiting node
+                    #print(f'vehicle id: {k}, vehicle node: {next_vehicle_node}, succs: {state.successors(next_vehicle_node)}, time: {[vehicle.free_time for vehicle in env.vehicles]}')
+                    envs[i] = copy.deepcopy(env)
+                    for log_prob, action_node in zip(log_probs, action_nodes):
+                        action_node += 1 # Shift because we removed waiting action
+                        # expand each current candidate
+                        action = env.node2action(action_node)
+                        k_best_new.append((i, score - log_prob.item(), k, action.item(), n_broken))
+                    i += 1
 
         # order by score, select k best
-        k_best_new = sorted(k_best_new, key=lambda x: x[1])[:beam_width]
+        k_best_new = sorted(k_best_new, key=lambda x: (x[4], x[1]))[:beam_width]
 
         # step the env in potential envs
         k_best = []
-        for (i, score, k, action) in k_best_new:
+        for (i, score, k, action, _) in k_best_new:
             env = copy.deepcopy(envs[i])
             env.evaluate_step(k, action)
-            k_best.append((env, not env.finish(), score))
+            n_broken_constraints = len(env.break_window) + len(env.break_ride_time) + 2*len(env.break_same) + 2*len(env.break_done)
+            k_best.append((env, not env.finish(), score, n_broken_constraints))
+        #print('len kbest: ', len(k_best))
     return k_best
 
 
 def beam_choose(darps):
-    idx = np.argmin([darp[0].time_penalty for darp in darps])
-    darp = darps[idx]
-    return darp[0], darp[0].cost()
+    #idx = np.argmin([darp[0].time_penalty for darp in darps])
+    #darp = darps[idx]
+    best_darp = sorted(darps, key=lambda x: (x[3], x[0].cost()))[0]
+    return best_darp[0], best_darp[0].cost()

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import dgl
+from node_encoder import NodeEncoder
 
 """
     Graph Transformer with edge features
@@ -22,8 +23,8 @@ class GraphTransformerNet(nn.Module):
                  d_model=512,
                  num_layers=6,
                  num_heads=8,
-                 #d_k=64,
-                 #d_v=64,
+                 d_k=64,
+                 d_v=64,
                  #d_ff=2048,
                  d_last_ff=1024,
                  dropout=0.1,
@@ -72,6 +73,16 @@ class GraphTransformerNet(nn.Module):
         self.embedding_e = nn.Linear(num_edge_feat, d_model)
         
         #self.in_feat_dropout = nn.Dropout(in_feat_dropout)
+        self.node_encoder = NodeEncoder(
+            device,
+            input_seq_len=10,
+            d_model=d_model,
+            num_layers=2,
+            num_heads=num_heads,
+            d_k=d_k,
+            d_v=d_v,
+            d_ff=2*d_model,
+            dropout=dropout)
         
         self.layers = nn.ModuleList([ GraphTransformerLayer(d_model, d_model, num_heads, dropout,
                                                     self.layer_norm, self.batch_norm, self.residual) for _ in range(num_layers) ]) 
@@ -86,6 +97,7 @@ class GraphTransformerNet(nn.Module):
     def forward(self, g, h, e, vehicle_node_id, h_lap_pos_enc=None, masking=False):
 
         # input embedding
+        #h = self.node_encoder(h)
         h = self.embedding_h(h)
         #h = self.in_feat_dropout(h)
         if self.lap_pos_enc:

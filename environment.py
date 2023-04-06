@@ -260,7 +260,7 @@ class Darp:
         _, _, T, _, L = self.parameter()
         K, N = self.train_K, self.train_N
         n_nodes = 2*N + K + 2
-        n_features = 15
+        n_features = 17
         node_features = torch.zeros(n_nodes, n_features) # input features of each node
         node_info = [] # node info to draw edges: node number, user (if any), vehicle (if any), type (pickup, dropoff, wait, source, destination), is_next_available (true or false), coords
         next_vehicle_node = -1 # node conatining the vehicle that will perform an action
@@ -268,19 +268,21 @@ class Darp:
             # pickup node
             window = shift_window(u.pickup_window, time)
             node_features[u.id, one_hot_node_type('pickup')] = 1    # Type of node (pickup, dropoff, wait, source, destination)
-            node_features[u.id, 5] = window[0]                      # start of window
-            node_features[u.id, 6] = window[1]                      # end of window
-            node_features[u.id, 7] = u.serve_duration               # service time
-            node_features[u.id, 8] = L - u.ride_time                # remaining ride time
-            node_features[u.id, 9] = u.load                         # user load
+            node_features[u.id, 5] = u.pickup_coords[0]             # x coord
+            node_features[u.id, 6] = u.pickup_coords[1]             # y coord
+            node_features[u.id, 7] = window[0]                      # start of window
+            node_features[u.id, 8] = window[1]                      # end of window
+            node_features[u.id, 9] = u.serve_duration               # service time
+            node_features[u.id, 10] = L - u.ride_time               # remaining ride time
+            node_features[u.id, 11] = u.load                        # user load
             k_pres = self.vehicle_present(u.pickup_coords)          # check whether the is a vehicle on that node
             if k_pres:
-                node_features[u.id, 10] = 1                         # vehicle present
-                node_features[u.id, 11] = k_pres.free_capacity      # free capacity
-                node_features[u.id, 12] = k_pres.free_time          # next available time
-                node_features[u.id, 13] = T                         # Remaining route duration ??? TO CHANGE
+                node_features[u.id, 12] = 1                         # vehicle present
+                node_features[u.id, 13] = k_pres.free_capacity      # free capacity
+                node_features[u.id, 14] = k_pres.free_time          # next available time
+                node_features[u.id, 15] = T                         # Remaining route duration ??? TO CHANGE
                 if k == k_pres.id:
-                    node_features[u.id, 14] = 1                     # is next available
+                    node_features[u.id, 16] = 1                     # is next available
                     next_vehicle_node = u.id
             
             node_info.append((u.id, u, k_pres, 'pickup', (k_pres and k_pres.id==k), u.pickup_coords))
@@ -288,19 +290,21 @@ class Darp:
             # dropoff node
             window = shift_window(u.dropoff_window, time)
             node_features[u.id+N, one_hot_node_type('dropoff')] = 1   # Type of node (pickup, dropoff, wait, source, destination)
-            node_features[u.id+N, 5] = window[0]                      # start of window
-            node_features[u.id+N, 6] = window[1]                      # end of window
-            node_features[u.id+N, 7] = u.serve_duration               # service time
-            node_features[u.id+N, 8] = L - u.ride_time                # remaining ride time
-            node_features[u.id+N, 9] = -u.load                        # - user load
+            node_features[u.id+N, 5] = u.dropoff_coords[0]            # x coord
+            node_features[u.id+N, 6] = u.dropoff_coords[1]            # y coord
+            node_features[u.id+N, 7] = window[0]                      # start of window
+            node_features[u.id+N, 8] = window[1]                      # end of window
+            node_features[u.id+N, 9] = u.serve_duration               # service time
+            node_features[u.id+N, 10] = L - u.ride_time               # remaining ride time
+            node_features[u.id+N, 11] = -u.load                       # - user load
             k_pres = self.vehicle_present(u.dropoff_coords)           # check whether the is a vehicle on that node
             if k_pres:
-                node_features[u.id+N, 10] = 1                          # vehicle present
-                node_features[u.id+N, 11] = k_pres.free_capacity      # free capacity
-                node_features[u.id+N, 12] = k_pres.free_time          # next available time
-                node_features[u.id+N, 13] = T                         # Remaining route duration ??? TO CHANGE
+                node_features[u.id+N, 12] = 1                         # vehicle present
+                node_features[u.id+N, 13] = k_pres.free_capacity      # free capacity
+                node_features[u.id+N, 14] = k_pres.free_time          # next available time
+                node_features[u.id+N, 15] = T                         # Remaining route duration ??? TO CHANGE
                 if k == k_pres.id:
-                    node_features[u.id+N, 14] = 1                     # is next available
+                    node_features[u.id+N, 16] = 1                     # is next available
                     next_vehicle_node = u.id+N
 
             node_info.append((u.id+N, u, k_pres, 'dropoff', (k_pres and k_pres.id==k), u.dropoff_coords))
@@ -311,13 +315,15 @@ class Darp:
 
         # Waiting node
         node_features[0, one_hot_node_type('wait')] = 1
+        node_features[0, 5] = self.vehicles[k].coords[0]
+        node_features[0, 6] = self.vehicles[k].coords[1]
         node_info.append((0, None, None, 'wait', False, self.vehicles[k].coords))
 
         # Source nodes, one for each vehicle
         for k_v in self.vehicles:
             node_features[2*N + 2 + k_v.id, one_hot_node_type('source')] = 1
             v_pres = None
-            if k_v.ordinal == 0: # if vehicle still at source station
+            if k_v.coords == [0.0, 0.0] and k_v.free_time < 1440: # if vehicle still at source station
                 v_pres = k_v
                 node_features[2*N + 2 + k_v.id, 10] = 1
                 node_features[2*N + 2 + k_v.id, 11] = k_v.free_capacity
@@ -368,9 +374,9 @@ class Darp:
             else:
                 return (action+1) + self.train_N # dropoff
         elif action == self.train_N: # destination
-            return 2*self.train_N + 1
+            return 2*action + 1 # 2N + 1
         elif action == self.train_N + 1: # wait
-            return 0
+            return torch.tensor(0, device= self.device) 
         else:
             raise RuntimeError('Action not recognized')
     
@@ -379,11 +385,11 @@ class Darp:
         given an node in the state graph, returns the corresponding action
         """
         if node == 0: # wait
-            return self.train_N + 1
+            return torch.tensor(self.train_N + 1, device= self.device)
         elif node <= 2*self.train_N: # user
             return ((node-1) % self.train_N)
         elif node == 2*self.train_N + 1: # destination
-            return self.train_N
+            return torch.tensor(self.train_N, device= self.device)
         else:
             raise RuntimeError('Action not recognized')
     
@@ -504,9 +510,10 @@ class Darp:
 
     def predict(self, graph, vehicle_node_id, user_mask=None, src_mask=None):
         #graph, ks, _, _ = DataLoader([graph, vehicle_node_id, 0, 0], batch_size=1, collate_fn=collate)  # noqa
-        ks = torch.tensor([vehicle_node_id])
-        batch_x = graph.ndata['feat']
-        batch_e = graph.edata['feat']
+        graph = graph.to(self.device)
+        ks = torch.tensor([vehicle_node_id], device=self.device)
+        batch_x = graph.ndata['feat'].to(self.device)
+        batch_e = graph.edata['feat'].to(self.device)
 
         if self.mode == 'evaluate':
             #pred_mask = [0 if self.users[i].beta == 2 else 1 for i in range(0, self.test_N)] + \

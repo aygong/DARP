@@ -55,8 +55,6 @@ def dataset(args):
                     raise ValueError('Error in graph creation: vehicle cannot perform best action.')
                 #print(action)
                 
-                sum_travel_times += darp.supervise_step(k)
-
                 #print(f'vehicle id: {k}, vehicle node: {next_vehicle_node}')
                 #print('vehicle state: ', state.ndata['feat'][next_vehicle_node])
                 #print('vehicle neighbors: ', state.successors(next_vehicle_node))
@@ -67,6 +65,25 @@ def dataset(args):
                 #print('users ids: ', [u.id for u in darp.users])
                 #print(len(state.successors(0)))
                 #print('-'*30)
+                
+                for suc in state.successors(next_vehicle_node):
+                    if suc > darp.train_N and suc <= darp.train_N * 2:
+                        u_id = suc - (darp.train_N + 1)
+                        u = darp.users[u_id]
+                        v = darp.vehicles[k]
+                        if u.served != v.id:
+                            raise ValueError(f'Error in graph creation: vehicle is not supposed to be linked to other dropoffs. vehicle node: {next_vehicle_node}, user node: {suc}')
+                    
+                    if next_vehicle_node > 0 and next_vehicle_node <= darp.train_N and suc == 2*darp.train_N + 1:
+                        raise ValueError(f'Error in graph creation: vehicle on pickup is not supposed to be linked to destination. vehicle node: {next_vehicle_node}, user node: {suc}')
+                    
+                if next_vehicle_node > 0 and next_vehicle_node <= darp.train_N:
+                    dropoff_node = next_vehicle_node + darp.train_N
+                    if dropoff_node not in state.successors(next_vehicle_node):
+                        raise ValueError(f'Error in graph creation: vehicle on pickup is supposed to be linked to corresponding dropoff. vehicle node: {next_vehicle_node}, user node: {dropoff_node}')
+
+
+                sum_travel_times += darp.supervise_step(k)
 
 
                 data.append([state, next_vehicle_node, node, cost_to_go])

@@ -72,7 +72,7 @@ def supervision(args):
     model = GraphTransformerNet(
         device=device,
         num_nodes=2*train_N + train_K + 2,
-        num_node_feat=15,
+        num_node_feat=17,
         num_edge_feat=3,
         d_model=128,
         num_layers=4,
@@ -87,7 +87,7 @@ def supervision(args):
 
     criterion_policy = nn.CrossEntropyLoss()
     criterion_value = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
     epochs = args.epochs
