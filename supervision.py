@@ -87,7 +87,7 @@ def supervision(args):
 
     criterion_policy = nn.CrossEntropyLoss()
     criterion_value = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
     epochs = args.epochs
@@ -198,6 +198,7 @@ def supervision(args):
                 'epoch': epoch,
                 'execution time': exec_time / 3600,
                 'estimated execution time remaining': exec_time * (epochs - epoch - 1) / 3600,
+                'validation accuracy': valid_policy_performance[epoch],
             }, file)
             file.write("\n")
 

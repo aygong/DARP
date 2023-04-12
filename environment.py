@@ -325,12 +325,12 @@ class Darp:
             v_pres = None
             if k_v.coords == [0.0, 0.0] and k_v.free_time < 1440: # if vehicle still at source station
                 v_pres = k_v
-                node_features[2*N + 2 + k_v.id, 10] = 1
-                node_features[2*N + 2 + k_v.id, 11] = k_v.free_capacity
-                node_features[2*N + 2 + k_v.id, 12] = k_v.free_time
-                node_features[2*N + 2 + k_v.id, 13] = T
+                node_features[2*N + 2 + k_v.id, 12] = 1
+                node_features[2*N + 2 + k_v.id, 13] = k_v.free_capacity
+                node_features[2*N + 2 + k_v.id, 14] = k_v.free_time
+                node_features[2*N + 2 + k_v.id, 15] = T
                 if k == k_v.id:
-                    node_features[2*N + 2 + k_v.id, 14] = 1
+                    node_features[2*N + 2 + k_v.id, 16] = 1
                     next_vehicle_node = 2*N + 2 + k_v.id
 
             node_info.append((2*N+2+k_v.id, None, v_pres, 'source', k_v.id == k, [0.0, 0.0]))

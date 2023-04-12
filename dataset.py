@@ -41,47 +41,9 @@ def dataset(args):
                 action = darp.action(k)
                 node = darp.action2node(action)
                 if node not in state.successors(next_vehicle_node):
-                    #print((state.edges()[0]).tolist())
-                    #print((state.edges()[1]).tolist())
-                    #print(state.successors(next_vehicle_node))
-                    #print(state.ndata['feat'][next_vehicle_node])
-                    #print(state.ndata['feat'][darp.action2node(action)])
-                    #print(next_vehicle_node)
-                    #print(action)
-                    #print(darp.action2node(action))
-                    #print(darp.vehicles[k].free_capacity)
-                    #print(darp.users[action].load, darp.users[action].alpha)
-                    #print(darp.vehicles[k].serving)
+                    
                     raise ValueError('Error in graph creation: vehicle cannot perform best action.')
-                #print(action)
                 
-                #print(f'vehicle id: {k}, vehicle node: {next_vehicle_node}')
-                #print('vehicle state: ', state.ndata['feat'][next_vehicle_node])
-                #print('vehicle neighbors: ', state.successors(next_vehicle_node))
-                
-                #print(f'time: {time}')
-                #print(f'action: {action}, action_node: {node}')
-                #print('users alphas: ', [u.alpha for u in darp.users])
-                #print('users ids: ', [u.id for u in darp.users])
-                #print(len(state.successors(0)))
-                #print('-'*30)
-                
-                for suc in state.successors(next_vehicle_node):
-                    if suc > darp.train_N and suc <= darp.train_N * 2:
-                        u_id = suc - (darp.train_N + 1)
-                        u = darp.users[u_id]
-                        v = darp.vehicles[k]
-                        if u.served != v.id:
-                            raise ValueError(f'Error in graph creation: vehicle is not supposed to be linked to other dropoffs. vehicle node: {next_vehicle_node}, user node: {suc}')
-                    
-                    if next_vehicle_node > 0 and next_vehicle_node <= darp.train_N and suc == 2*darp.train_N + 1:
-                        raise ValueError(f'Error in graph creation: vehicle on pickup is not supposed to be linked to destination. vehicle node: {next_vehicle_node}, user node: {suc}')
-                    
-                if next_vehicle_node > 0 and next_vehicle_node <= darp.train_N:
-                    dropoff_node = next_vehicle_node + darp.train_N
-                    if dropoff_node not in state.successors(next_vehicle_node):
-                        raise ValueError(f'Error in graph creation: vehicle on pickup is supposed to be linked to corresponding dropoff. vehicle node: {next_vehicle_node}, user node: {dropoff_node}')
-
 
                 sum_travel_times += darp.supervise_step(k)
 

@@ -128,7 +128,7 @@ class GraphTransformerNet(nn.Module):
 
         #pairs = torch.stack(pairs, dim=1)
         batch_size = len(vehicle_node_id)
-        vehicle_node_id = torch.tensor([i*self.num_nodes + k for i,k in enumerate(vehicle_node_id)])
+        vehicle_node_id = torch.tensor([i*self.num_nodes + k for i,k in enumerate(vehicle_node_id)], device=self.device)
         ks = vehicle_node_id.repeat_interleave(self.num_nodes).long()
         pairs = torch.cat([h[ks], h], dim=1)
         #print(h[ks].size(), h.size())
@@ -139,7 +139,7 @@ class GraphTransformerNet(nn.Module):
         if masking:
             #neighbors = g.successors(vehicle_node_id)
             neighbors = [g.successors(k) for k in vehicle_node_id]
-            mask = torch.tensor([False if i in neighbors[i//self.num_nodes] else True for i in range(batch_size * self.num_nodes)])
+            mask = torch.tensor([False if i in neighbors[i//self.num_nodes] else True for i in range(batch_size * self.num_nodes)], device=self.device)
             policy = policy.masked_fill(mask, -1e6)
         
         #print(policy.size())

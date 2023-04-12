@@ -57,6 +57,8 @@ def evaluation(args):
     if cuda_available:
         darp.model.cuda()
 
+    path_result = './result/'
+
     # Initialize the lists of metrics
     eval_run_time = []
     eval_time_penalty = []
@@ -130,6 +132,16 @@ def evaluation(args):
         print('# broken time window: {}'.format(eval_window[-1]))
         print('# broken ride time: {}\n'.format(eval_ride_time[-1]))
 
+        with open(path_result + 'evaluation_log.txt', 'a+') as file:
+            json.dump({
+                'Num instance': num_instance,
+                'Rist\'s cost': '{:.4f}'.format(eval_rist_cost[-1]),
+                'Predicted cost': '{:.4f}'.format(eval_pred_cost[-1]),
+                '# broken time window': eval_window[-1],
+                '# broken ride time': eval_ride_time[-1],
+            }, file)
+            file.write("\n")
+
     # Print the metrics on one standard instance
     print('--------Metrics on one standard instance:--------')
     print('Cost (Rist 2021): {:.2f}'.format(eval_rist_cost[0]))
@@ -154,7 +166,6 @@ def evaluation(args):
     print('# Not Same: {}'.format(np.sum(np.asarray(eval_not_same) > 0)))
     print('# Not Done: {}'.format(np.sum(np.asarray(eval_not_done) > 0)))
 
-    path_result = './result/'
     os.makedirs(path_result, exist_ok=True)
 
     with open(path_result + 'evaluation.txt', 'a+') as output:
@@ -292,7 +303,7 @@ def beam_search(darp, num_instance, src_mask, beam_width):
                             envs[i] = copy.deepcopy(env)
                             for log_prob, other_action_node in zip(log_probs, other_action_nodes):
                                 other_action_node += 1 # Shift because we removed waiting action
-                                if other_action_node not in state.successors(next_vehicle_node):
+                                if other_action_node not in state.successors(torch.tensor([next_vehicle_node], device=env.device)):
                                     print(f'ACTION NODE {other_action_node} NOT IN NEIGHBORS: {state.successors(next_vehicle_node)}, LOG_PROB: {log_prob}')
                                 # expand each current candidate
                                 other_action = env.node2action(other_action_node)
