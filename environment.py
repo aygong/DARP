@@ -86,7 +86,7 @@ class Darp:
             self.test_type, self.test_K, self.test_N, self.test_T, self.test_Q, self.test_L = \
                 load_instance(args.test_index, 'test')
             # Get the node-user mapping dictionary of test instances
-            self.node2user = node_to_user(self.test_N)
+            self.node2user = node_to_user(self.train_N) # was test_N before
             # Set the name of test instances
             self.test_name = self.test_type + str(self.test_K) + '-' + str(self.test_N)
             # Set the path of test instances
@@ -131,8 +131,10 @@ class Darp:
             user.served = self.train_K
             self.users.append(user)
         # Add dummy users
-        for _ in range(0, self.train_N - N):
+        #for _ in range(0, self.train_N - N):
+        for i in range(N+1, self.train_N+1):
             user = User(mode=self.mode)
+            user.id = i
             user.alpha = 2
             user.beta = 2
             user.served = self.train_K
@@ -140,7 +142,11 @@ class Darp:
 
         for i in range(1, 2 * N + 1):
             node = instance['instance'][i + 1]  # noqa
+            if i > N:
+                # shift to avoid dummy users
+                i += self.train_N - N
             user = self.users[self.node2user[i] - 1]
+
             if i <= N:
                 # Pick-up nodes
                 user.pickup_coords = [float(node[1]), float(node[2])]
@@ -154,6 +160,9 @@ class Darp:
 
         # Time-window tightening (Section 5.1.1, Cordeau 2006)
         for user in self.users:
+            if user.id > N:
+                # Dummy users
+                continue
             travel_time = euclidean_distance(user.pickup_coords, user.dropoff_coords)
             if user.id <= N / 2:
                 # Drop-off requests
@@ -179,8 +188,9 @@ class Darp:
             vehicle.free_capacity = Q
             self.vehicles.append(vehicle)
         # Add dummy vehicles
-        for _ in range(0, self.train_K - K):
+        for k in range(K, self.train_K):
             vehicle = Vehicle(mode=self.mode)
+            vehicle.id = k
             vehicle.free_time = 1440
             self.vehicles.append(vehicle)
 
@@ -195,9 +205,9 @@ class Darp:
         return instance['objective']  # noqa
 
     def beta(self, k):
-        _, N, _, _, _ = self.parameter()
+        #_, N, _, _, _ = self.parameter()
 
-        for i in range(0, N):
+        for i in range(0, self.train_N):
             user = self.users[i]
             if user.alpha == 1 and user.served == self.vehicles[k].id:
                 # 1: the user is being served by the vehicle performing an action at time step t
@@ -348,7 +358,7 @@ class Darp:
         }
         for i, (i_u, u, k_u, t_u, u_next, u_coords) in enumerate(node_info):
             for (i_v, v, k_v, t_v, v_next, v_coords) in node_info[i+1:]:
-                if is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
+                if is_edge(self, u, k_u, t_u, u_next, v, k_v, t_v, v_next):
                     pairing = 1 if (u and u==v) else 0
                     waiting = 1 if (t_u=='wait' or t_v=='wait') else 0
                     edge_feat = torch.tensor([euclidean_distance(u_coords, v_coords), pairing, waiting])
@@ -523,7 +533,6 @@ class Darp:
             #policy_outputs = policy_outputs.masked_fill(pred_mask == 0, -1e6)
         else:
             policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, masking=True)
-
         probs = f.softmax(policy_outputs, dim=1)
         _, action_node = torch.max(probs, 1)
 

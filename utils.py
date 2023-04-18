@@ -83,7 +83,19 @@ def one_hot_node_type(typ):
     else:
         raise ValueError(f'Unknown node type: {typ}.')
     
-def is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
+def active_vehicles(darp):
+    """
+    returns the number of active vehicles
+    """
+    return sum([v.free_time < 1440 for v in darp.vehicles])
+
+def waiting_users(darp):
+    """
+    returns the number of waiting users (alpha=0)
+    """
+    return sum([u.alpha==0 for u in darp.users])
+    
+def is_edge(darp, u, k_u, t_u, u_next, v, k_v, t_v, v_next):
     if (u and u.alpha == 2 and not k_u) or (v and v.alpha == 2 and not k_v): # already visited user
         return False
     if (t_u == 'pickup' and u.alpha == 1 and not k_u) or (t_v == 'pickup' and v.alpha == 1 and not k_v): # already visited pickups
@@ -91,6 +103,9 @@ def is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
     if (t_u == 'source' and not k_u) or (t_v == 'source' and not k_v): # empty source station
         return False
     if t_u == 'wait' or t_v == 'wait': # waiting node connected to every other node, CHANGE ???
+        if (u_next and t_u == 'dropoff') or (v_next and t_v == 'dropoff'):
+            # do not connect to wait if next vehicle is on dropoff
+            return False
         return True
     if k_u and k_v: # both contain vehicles
         return False
@@ -98,7 +113,10 @@ def is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
 
     
     if t_u == 'destination':
-        if k_v: 
+        if k_v:
+            if active_vehicles(darp) == 1 and waiting_users(darp) != 0:
+                # if k_v is the last active vehicle and there are still users to be picked up, it cannot go to destination
+                return False
             if t_v == 'dropoff' and len(k_v.serving) <= 1: # vehicle can serve last user and leave
                 return True
             if t_v == 'source': # Vehicle at source is empty
@@ -112,6 +130,9 @@ def is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
         if t_v == 'pickup' and not k_v and k_u.free_capacity >= v.load: # connect to available pickups
             return True
         if t_v == 'destination':
+            if active_vehicles(darp) == 1 and waiting_users(darp) != 0:
+                # if k_u is the last active vehicle and there are still users to be picked up, it cannot go to destination
+                return False
             return True
         return False
     
@@ -137,6 +158,9 @@ def is_edge(u, k_u, t_u, u_next, v, k_v, t_v, v_next):
             if t_v == 'dropoff':
                 return (v.id in k_u.serving)
             if t_v == 'destination' and len(k_u.serving) <= 1:
+                if active_vehicles(darp) == 1 and waiting_users(darp) != 0:
+                    # if k_u is the last active vehicle and there are still users to be picked up, it cannot go to destination
+                    return False
                 return True
             return False
         else:
