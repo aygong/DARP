@@ -252,7 +252,7 @@ class Darp:
                 return k
         return None
     
-    def state_graph(self, k, time):
+    def state_graph(self, k, current_time):
         """
         Construct a graph of the situation
         Nodes: 
@@ -274,9 +274,10 @@ class Darp:
         node_features = torch.zeros(n_nodes, n_features) # input features of each node
         node_info = [] # node info to draw edges: node number, user (if any), vehicle (if any), type (pickup, dropoff, wait, source, destination), is_next_available (true or false), coords
         next_vehicle_node = -1 # node conatining the vehicle that will perform an action
+
         for u in self.users:
             # pickup node
-            window = shift_window(u.pickup_window, time)
+            window = shift_window(u.pickup_window, current_time)
             node_features[u.id, one_hot_node_type('pickup')] = 1    # Type of node (pickup, dropoff, wait, source, destination)
             node_features[u.id, 5] = u.pickup_coords[0]             # x coord
             node_features[u.id, 6] = u.pickup_coords[1]             # y coord
@@ -295,10 +296,11 @@ class Darp:
                     node_features[u.id, 16] = 1                     # is next available
                     next_vehicle_node = u.id
             
-            node_info.append((u.id, u, k_pres, 'pickup', (k_pres and k_pres.id==k), u.pickup_coords))
+            if (u.alpha == 0 or k_pres):
+                node_info.append((u.id, u, k_pres, 'pickup', (k_pres and k_pres.id==k), u.pickup_coords))
 
             # dropoff node
-            window = shift_window(u.dropoff_window, time)
+            window = shift_window(u.dropoff_window, current_time)
             node_features[u.id+N, one_hot_node_type('dropoff')] = 1   # Type of node (pickup, dropoff, wait, source, destination)
             node_features[u.id+N, 5] = u.dropoff_coords[0]            # x coord
             node_features[u.id+N, 6] = u.dropoff_coords[1]            # y coord
@@ -317,8 +319,8 @@ class Darp:
                     node_features[u.id+N, 16] = 1                     # is next available
                     next_vehicle_node = u.id+N
 
-            node_info.append((u.id+N, u, k_pres, 'dropoff', (k_pres and k_pres.id==k), u.dropoff_coords))
-
+            if (u.alpha <= 1 or k_pres):
+                node_info.append((u.id+N, u, k_pres, 'dropoff', (k_pres and k_pres.id==k), u.dropoff_coords))
         # Destination node
         node_features[2*N + 1, one_hot_node_type('destination')] = 1
         node_info.append((2*N+1, None, None, 'destination', False, [0.0, 0.0]))
@@ -342,14 +344,12 @@ class Darp:
                 if k == k_v.id:
                     node_features[2*N + 2 + k_v.id, 16] = 1
                     next_vehicle_node = 2*N + 2 + k_v.id
-
-            node_info.append((2*N+2+k_v.id, None, v_pres, 'source', k_v.id == k, [0.0, 0.0]))
-
+            if v_pres != None:
+                node_info.append((2*N+2+k_v.id, None, v_pres, 'source', k_v.id == k, [0.0, 0.0]))
         # Create a DGL Graph
         g = dgl.DGLGraph()
         g.add_nodes(n_nodes)
         g.ndata['feat'] = node_features
-
         # edges
         edges = {
             'src':[],
@@ -361,15 +361,16 @@ class Darp:
                 if is_edge(self, u, k_u, t_u, u_next, v, k_v, t_v, v_next):
                     pairing = 1 if (u and u==v) else 0
                     waiting = 1 if (t_u=='wait' or t_v=='wait') else 0
-                    edge_feat = torch.tensor([euclidean_distance(u_coords, v_coords), pairing, waiting])
+                    #edge_feat = torch.tensor([euclidean_distance(u_coords, v_coords), pairing, waiting])
                     #g.add_edges(i_u, i_v, data={'feat':edge_feat})
                     edges['src'].append(i_u)
                     edges['dst'].append(i_v)
-                    edges['feat'].append(edge_feat)
+                    #edges['feat'].append(edge_feat)
+                    edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting])
 
-        g.add_edges(edges['src'], edges['dst'], data={'feat':torch.stack(edges['feat'])})
-        
+        g.add_edges(edges['src'], edges['dst'], data={'feat':torch.tensor(edges['feat'])})
         g = dgl.add_reverse_edges(g, copy_ndata=True, copy_edata=True)
+
         if next_vehicle_node == -1:
             raise ValueError('No node found for next vehicle')
         return g, next_vehicle_node
@@ -428,8 +429,9 @@ class Darp:
     def action(self, k):
         vehicle = self.vehicles[k]
         r = vehicle.ordinal
-
-        if vehicle.free_time + self.args.wait_time < vehicle.schedule[r]:
+        node = vehicle.route[r]
+        isDropOff = node > self.train_N and node <= 2*self.train_N # we do not allow to wait on dropoff nodes
+        if vehicle.free_time + self.args.wait_time < vehicle.schedule[r] and not isDropOff:
             # Wait at the present node
             action = self.train_N + 1
         else:
@@ -543,10 +545,13 @@ class Darp:
         K, N, T, Q, L = self.parameter()
         vehicle = self.vehicles[k]
 
+        constraint_penalty = 0.0
+
         if action == self.train_N + 1:
             # Wait at the present node
             vehicle.free_time += self.args.wait_time
             update_ride_time(vehicle, self.users, self.args.wait_time)
+            travel_time = 0.0
         else:
             if vehicle.pred_route[-1] != 0:
                 # Start to serve the user at the present node
@@ -559,7 +564,8 @@ class Darp:
                             print('The pick-up time window of User {} is broken: {:.2f} not in {}.'.format(
                                 user.id, vehicle.free_time, user.pickup_window))
                         self.break_window.append(user.id)
-                        self.time_penalty += vehicle.free_time - user.pickup_window[0]
+                        self.time_penalty += vehicle.free_time - user.pickup_window[1]
+                        constraint_penalty += vehicle.free_time - user.pickup_window[1]
                     # Append the user to the serving list
                     vehicle.serving.append(user.id)
                 else:
@@ -570,13 +576,15 @@ class Darp:
                                 user.id, user.ride_time - user.serve_duration, L))
                         self.break_ride_time.append(user.id)
                         self.time_penalty += user.ride_time - user.serve_duration - L
+                        constraint_penalty += user.ride_time - user.serve_duration - L
                     # Check the drop-off time window
                     if check_window(user.dropoff_window, vehicle.free_time) and user.id <= N / 2:
                         if self.logs:
                             print('The drop-off time window of User {} is broken: {:.2f} not in {}.'.format(
                                 user.id, vehicle.free_time, user.dropoff_window))
                         self.break_window.append(user.id)
-                        self.time_penalty += vehicle.free_time - user.dropoff_window[0]
+                        self.time_penalty += vehicle.free_time - user.dropoff_window[1]
+                        constraint_penalty += vehicle.free_time - user.dropoff_window[1]
                     # Remove the user from the serving list
                     vehicle.serving.remove(user.id)
 
@@ -605,13 +613,16 @@ class Darp:
                 update_ride_time(vehicle, self.users, ride_time)
             else:
                 # Move to the destination depot
-                vehicle.pred_cost += euclidean_distance(vehicle.coords, [0.0, 0.0])
+                travel_time = euclidean_distance(vehicle.coords, [0.0, 0.0])
+                vehicle.pred_cost += travel_time
                 vehicle.coords = [0.0, 0.0]
                 vehicle.free_time = 1440
                 vehicle.serve_duration = 0
 
             vehicle.pred_route.append(action + 1)
             vehicle.pred_schedule.append(vehicle.free_time)
+
+        return travel_time, constraint_penalty
 
     def finish(self):
         free_times = np.array([vehicle.free_time for vehicle in self.vehicles])

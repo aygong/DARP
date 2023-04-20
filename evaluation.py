@@ -55,7 +55,7 @@ def evaluation(args):
     checkpoint = torch.load('./model/' + model + '-' + model_name + '.model')
     darp.model.load_state_dict(checkpoint['model_state_dict'])
     darp.model.eval()
-    torch.no_grad()
+    #torch.no_grad()
 
     if cuda_available:
         darp.model.cuda()

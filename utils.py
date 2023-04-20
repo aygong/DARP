@@ -1,6 +1,7 @@
 import math
 import torch
 import dgl
+import random
 
 parameters = [['0', 'a', 2, 16, 480, 3, 30],  # 0
               ['1', 'a', 2, 20, 600, 3, 30],  # 1
@@ -181,3 +182,9 @@ def collate(samples):
     batched_graph = dgl.batch(graphs)
 
     return batched_graph, ks, actions, values
+
+def shuffle_list(*ls):
+    l =list(zip(*ls))
+
+    random.shuffle(l)
+    return zip(*l)

@@ -4,7 +4,6 @@ import os
 import shutil
 import sys
 
-
 def dataset(args):
     darp = Darp(args, mode='supervise')
 
@@ -24,18 +23,16 @@ def dataset(args):
         # Run the simulator
         while darp.finish():
             free_times = [vehicle.free_time for vehicle in darp.vehicles]
-            time = np.min(free_times)
-            indices = np.argwhere(free_times == time)
+            min_time = np.min(free_times)
+            indices = np.argwhere(free_times == min_time)
             indices = indices.flatten().tolist()
-
             for _, k in enumerate(indices):
                 if darp.vehicles[k].free_time == 1440:
                     continue
 
                 darp.beta(k)
                 #state = darp.state(k, time)
-                state, next_vehicle_node = darp.state_graph(k, time)
-                
+                state, next_vehicle_node = darp.state_graph(k, min_time)
                 
                 cost_to_go = objective - sum_travel_times # cost to go from this state until the end, BEFORE taking the action
                 action = darp.action(k)
@@ -47,9 +44,8 @@ def dataset(args):
 
                 sum_travel_times += darp.supervise_step(k)
 
-
                 data.append([state, next_vehicle_node, node, cost_to_go])
-
+                
         # Save the training sets
         print(num_dataset, num_instance + 1, sys.getsizeof(data), len(data), objective)
         if (num_instance + 1) % args.num_sl_instances == 0:

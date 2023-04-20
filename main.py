@@ -9,8 +9,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     # Arguments of dataset.py
-    parser.add_argument('--dataset', type=int, default=0) # 0 for false, 1 for true
-    parser.add_argument('--train_index', type=int, default=9)
+    parser.add_argument('--dataset', type=int, default=1) # 0 for false, 1 for true
+    parser.add_argument('--train_index', type=int, default=7)
     parser.add_argument('--num_sl_subsets', type=int, default=1)
     parser.add_argument('--num_sl_instances', type=int, default=500)
     parser.add_argument('--wait_time', type=int, default=7)
@@ -27,11 +27,11 @@ def parse_arguments():
     parser.add_argument('--num_rl_instances', type=int, default=5)
 
     # Arguments of evaluation.py
-    parser.add_argument('--evaluation', type=int, default=1) # 0 for false, 1 for true
+    parser.add_argument('--evaluation', type=int, default=0) # 0 for false, 1 for true
     parser.add_argument('--model_type', type=int, default=0)  # 1: RL, 0: SL
-    parser.add_argument('--test_index', type=int, default=8)
+    parser.add_argument('--test_index', type=int, default=7)
     parser.add_argument('--num_tt_instances', type=int, default=10)
-    parser.add_argument('--beam', type=int, default=0)
+    parser.add_argument('--beam', type=int, default=3)
 
     # Arguments of transformer.py
     parser.add_argument('--d_model', type=int, default=128)
