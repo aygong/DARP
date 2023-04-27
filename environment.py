@@ -86,7 +86,12 @@ class Darp:
             self.test_type, self.test_K, self.test_N, self.test_T, self.test_Q, self.test_L = \
                 load_instance(args.test_index, 'test')
             # Get the node-user mapping dictionary of test instances
-            self.node2user = node_to_user(self.train_N) # was test_N before
+            N = max(self.train_N, self.test_N)
+            K = max(self.train_K, self.test_K)
+            # Update train N and K if we test on bigger instances, to make it look like it was trained on such instanvces
+            self.train_N = N
+            self.train_K = K
+            self.node2user = node_to_user(N) # was test_N before
             # Set the name of test instances
             self.test_name = self.test_type + str(self.test_K) + '-' + str(self.test_N)
             # Set the path of test instances
@@ -130,7 +135,7 @@ class Darp:
             user.id = i
             user.served = self.train_K
             self.users.append(user)
-        # Add dummy users
+        # Add dummy users if necessary
         #for _ in range(0, self.train_N - N):
         for i in range(N+1, self.train_N+1):
             user = User(mode=self.mode)
@@ -144,7 +149,8 @@ class Darp:
             node = instance['instance'][i + 1]  # noqa
             if i > N:
                 # shift to avoid dummy users
-                i += self.train_N - N
+                if N < self.train_N:
+                    i += self.train_N - N
             user = self.users[self.node2user[i] - 1]
 
             if i <= N:
@@ -183,7 +189,7 @@ class Darp:
             vehicle.id = k
             vehicle.route = instance['routes'][k]  # noqa
             vehicle.route.insert(0, 0)
-            vehicle.route.append(2 * N + 1)
+            vehicle.route.append(2 * self.train_N + 1)
             vehicle.schedule = instance['schedule'][k]  # noqa
             vehicle.free_capacity = Q
             self.vehicles.append(vehicle)
@@ -526,15 +532,17 @@ class Darp:
         ks = torch.tensor([vehicle_node_id], device=self.device)
         batch_x = graph.ndata['feat'].to(self.device)
         batch_e = graph.edata['feat'].to(self.device)
+        K,N,_,_,_ = self.parameter()
+        num_nodes = 2*self.train_N + self.train_K + 2
 
         if self.mode == 'evaluate':
             #pred_mask = [0 if self.users[i].beta == 2 else 1 for i in range(0, self.test_N)] + \
             #            [0 for _ in range(0, self.train_N - self.test_N)] + [1, 1]
             #pred_mask = torch.Tensor(pred_mask).to(self.device)
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, masking=True)
+            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, num_nodes, masking=True)
             #policy_outputs = policy_outputs.masked_fill(pred_mask == 0, -1e6)
         else:
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, masking=True)
+            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, num_nodes, masking=True)
         probs = f.softmax(policy_outputs, dim=1)
         _, action_node = torch.max(probs, 1)
 
@@ -626,7 +634,7 @@ class Darp:
 
     def finish(self):
         free_times = np.array([vehicle.free_time for vehicle in self.vehicles])
-        num_finish = np.sum(free_times == 1440)
+        num_finish = np.sum(free_times >= 1440)
 
         if num_finish == self.train_K:
             flag = False

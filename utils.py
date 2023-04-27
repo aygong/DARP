@@ -107,6 +107,12 @@ def is_edge(darp, u, k_u, t_u, u_next, v, k_v, t_v, v_next):
         if (u_next and t_u == 'dropoff') or (v_next and t_v == 'dropoff'):
             # do not connect to wait if next vehicle is on dropoff
             return False
+        if (u_next and t_u == 'pickup' and k_u.free_time + darp.args.wait_time > u.pickup_window[1]) or (v_next and t_v == 'pickup' and k_v.free_time + darp.args.wait_time > v.pickup_window[1]):
+            # do not connect to wait if user window is going to be broken
+            return False
+        #if (u_next and t_u == 'source') or (v_next and t_v == 'source'):
+        #    # TEST, TO CHANGE
+        #    return False
         return True
     if k_u and k_v: # both contain vehicles
         return False

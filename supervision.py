@@ -87,7 +87,7 @@ def supervision(args):
 
     criterion_policy = nn.CrossEntropyLoss()
     criterion_value = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
     epochs = args.epochs
@@ -105,7 +105,11 @@ def supervision(args):
         iters = 0
         model.train()
 
+
         for _, (graphs, ks, action_nodes, values) in enumerate(train_data):
+            if cuda_available:
+                torch.cuda.empty_cache()
+
             iters += 1
             ks = ks.to(device)
             action_nodes = action_nodes.to(device)
@@ -115,10 +119,10 @@ def supervision(args):
             batch_e = graphs.edata['feat'].to(device)
 
             optimizer.zero_grad()
-
             policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, masking=True)
             policy_loss = criterion_policy(policy_outputs, action_nodes)
-            value_loss = 0#criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
+            #print(value_outputs.size(), values.size())
+            value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
             
             loss =  policy_loss + value_loss * args.loss_ratio
             loss.backward()
@@ -132,16 +136,18 @@ def supervision(args):
             train_policy_measure = (predicted == action_nodes).sum().item() / action_nodes.size(0)
             train_value_measure = abs(value_outputs - values).sum().item() / values.size(0)
 
+
             if iters % 20 == 0:
                 print('Epoch: {}.'.format(epoch),
                       'Iteration: {}.'.format(iters),
                       'Training policy loss: {:.4f}.'.format(policy_loss.item()),
-                      'Training policy accuracy: {:.4f}.'.format(train_policy_measure)#,
-                      #'Training value loss: {:.4f}.'.format(value_loss.item()),
-                      #'Training value MAE: {:.4f}.'.format(train_value_measure)
+                      'Training policy accuracy: {:.4f}.'.format(train_policy_measure),
+                      'Training value loss: {:.4f}.'.format(value_loss.item()),
+                      'Training value MAE: {:.4f}.'.format(train_value_measure)
                       )
             train_policy_performance[epoch] += train_policy_measure
             train_value_performance[epoch] += train_value_measure
+
 
         train_policy_performance[epoch] /= (iters + 1)
         train_value_performance[epoch] /= (iters + 1)
@@ -165,7 +171,7 @@ def supervision(args):
 
                     policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, masking=True)
                     policy_loss = criterion_policy(policy_outputs, action_nodes)
-                    value_loss = 0#criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
+                    value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
                     loss =  policy_loss + value_loss * args.loss_ratio
 
                     _, predicted = torch.max(f.softmax(policy_outputs, dim=1), 1)
@@ -176,15 +182,15 @@ def supervision(args):
             valid_policy_performance[epoch] = valid_measure[0] / valid_measure[2]
             valid_value_performance[epoch] = valid_measure[1] / valid_measure[2]
             print('Validation policy accuracy: {:.4f}.'.format(valid_policy_performance[epoch]))
-            #print('Validation value MAE: {:.4f}.'.format(valid_value_performance[epoch]))
+            print('Validation value MAE: {:.4f}.'.format(valid_value_performance[epoch]))
 
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
-            'policy_loss': criterion_policy#,
-            #'value_loss': criterion_value,
+            'policy_loss': criterion_policy,
+            'value_loss': criterion_value,
         }, './model/' + 'sl-' + model_name + '.model')
 
         end = time.time()
