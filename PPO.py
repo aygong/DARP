@@ -7,6 +7,7 @@ from utils import *
 from evaluation import *
 from graph_transformer import GraphTransformerNet
 import time
+from sklearn.preprocessing import StandardScaler
 
 class PPO:
     def __init__(
@@ -27,7 +28,9 @@ class PPO:
             path_result,
             entropy_coef = 1e-3,
             entropy_coef_decay = 0.99,
-            constraint_penalty_alpha = 10.0
+            constraint_penalty_alpha = 10.0,
+            use_gae = True,
+            gae_lambda = 0.95
             ):
         
         self.args = args
@@ -47,6 +50,8 @@ class PPO:
         self.save_rate = save_rate
         self.path_result = path_result
         self.constraint_penalty_alpha = constraint_penalty_alpha
+        self.use_gae = use_gae
+        self.gae_lambda = gae_lambda
         
         # Episodes data
         self.states = []
@@ -57,20 +62,27 @@ class PPO:
         self.values = []
         self.vehicle_node_ids = []
 
+        
         self.darp = Darp(args, mode='reinforce', device=device)
+        self.num_nodes =2*self.darp.train_N + self.darp.train_K + 3
         self.darp.model = GraphTransformerNet(
             device=device,
-            num_nodes=2*self.darp.train_N + self.darp.train_K + 2,
-            num_node_feat=17,
+            num_nodes=self.num_nodes,
+            num_node_feat=18,
             num_edge_feat=3,
-            d_model=128,
-            num_layers=4,
-            num_heads=8,
+            d_model=args.d_model,
+            num_layers=args.num_layers,
+            num_heads=args.num_heads,
+            d_k=args.d_k,
+            d_v=args.d_v,
+            d_ff = args.d_ff,
             dropout=0.1
         )
         
         checkpoint = torch.load('./model/sl-' + model_name + '.model')
         self.darp.model.load_state_dict(checkpoint['model_state_dict'])
+        #self.value_scaler = StandardScaler()
+        #self.value_scaler.set_params(checkpoint['value_scaler_params'])
         
         self.darp.model.to(device)
         self.model = self.darp.model
@@ -85,7 +97,8 @@ class PPO:
         e = graph.edata['feat'].to(self.device)
 
         with torch.no_grad():
-            policy, value = self.model(graph, x, e, k, masking=True)
+            policy, value = self.model(graph, x, e, k, self.num_nodes, masking=True)
+            #value = value_inverse_transform(self.value_scaler, value)
             probs = f.softmax(policy, dim=1)
             a = torch.argmax(probs).item()
             p = probs[a].item()
@@ -99,8 +112,10 @@ class PPO:
         e = graph.edata['feat'].to(self.device)
 
         with torch.no_grad():
-            policy, value = self.model(graph, x, e, k, masking=True)
+            policy, value = self.model(graph, x, e, k, self.num_nodes, masking=True)
+            #value = value_inverse_transform(self.value_scaler, value)
             probs = f.softmax(policy, dim=1)
+            #print(f'PROBS: {probs}')
             cat = Categorical(probs=probs)
 
             action = cat.sample()
@@ -117,7 +132,8 @@ class PPO:
         batch_x = batched_graph.ndata['feat'].to(self.device)
         batch_e = batched_graph.edata['feat'].to(self.device)
 
-        policy_outputs, value_outputs = self.model(batched_graph, batch_x, batch_e, vehicle_node_ids, masking=True)
+        policy_outputs, value_outputs = self.model(batched_graph, batch_x, batch_e, vehicle_node_ids, self.num_nodes, masking=True)
+        #value_outputs = value_inverse_transform(self.value_scaler, value_outputs)
         probs = f.softmax(policy_outputs, dim=1)
         cat = Categorical(probs=probs)
 
@@ -193,17 +209,32 @@ class PPO:
     
     def compute_returns(self):
         # Compute returns of trajectories
-        self.returns = np.zeros(len(self.costs))
         with torch.no_grad():
-            for t in reversed(range(len(self.costs))):
-                if t == len(self.costs) - 1:
-                    next_return = 0
-                else:
-                    next_return = self.returns[t+1]
-                nextnonterminal = 0 if self.dones[t] else 1
-                self.returns[t] = self.costs[t] + nextnonterminal * next_return
-            self.advantages = (np.array(self.values) - self.returns) /(np.array(self.values)) # the smaller the returns (cost) the better
-            
+            if self.use_gae:
+                self.advantages = np.zeros_like(self.costs)
+                last_gae = 0
+                for t in reversed(range(len(self.costs))):
+                    if t == len(self.costs) - 1:
+                        next_value = 0
+                    else:
+                        next_value = self.values[t+1]
+                    nextnonterminal = 0 if self.dones[t] else 1
+                    delta = self.costs[t] + next_value * nextnonterminal - self.values[t]
+                    last_gae = delta + self.gae_lambda * nextnonterminal * last_gae
+                    self.advantages[t] = -last_gae # advantage: positive:good, negative:bad
+                self.returns = -self.advantages + np.array(self.values) # returns: large:bad, small:good (correspond to total cost)
+            else:
+                self.returns = np.zeros_like(self.costs)
+                for t in reversed(range(len(self.costs))):
+                    if t == len(self.costs) - 1:
+                        next_return = 0
+                    else:
+                        next_return = self.returns[t+1]
+                    nextnonterminal = 0 if self.dones[t] else 1
+                    self.returns[t] = self.costs[t] + nextnonterminal * next_return
+                self.advantages = (np.array(self.values) - self.returns)# /(np.array(self.values)) # the smaller the returns (cost) the better
+                #print(f'values: {np.array(self.values)}, returns: {self.returns}, advantages: {self.advantages}')
+                
     
     
 
@@ -260,11 +291,13 @@ class PPO:
 
                 new_log_probs, entropies, new_values = self.evaluate_policy(states[start:end], vehicle_node_ids[start:end], action_nodes[start:end])
                 log_ratio = new_log_probs - log_probs[start:end]
+                #print(f'newlogprob: {new_log_probs}, logprobs: {log_probs[start:end]}')
                 ratio = log_ratio.exp() # a/b == exp(log(a)-log(b))
                 
                 policy_loss1 = -advantages[start:end] * ratio
                 policy_loss2 = -advantages[start:end] * torch.clamp(ratio, 1 - self.clip_rate, 1 + self.clip_rate)
                 policy_loss = torch.max(policy_loss1, policy_loss2).mean()
+                #print(f'ratio: {ratio}, advantage: {advantages[start:end]}, policy_loss: {policy_loss}')
 
                 #value_loss = self.criterion_value(new_values / returns[start:end], torch.ones(len(new_values)).to(self.device))
                 value_loss = ((new_values / returns[start:end] - torch.ones(len(new_values)).to(self.device))**2).mean()
@@ -289,8 +322,11 @@ class PPO:
     
     def train(self):
         # Train policy and value networks on collected data
-        self.model.train()
+        # Evaluate initial network
+        evaluation(self.args, self.model)
         
+        # Disable dropout and batch norm
+        self.model.eval()
         # Loop:
         for epoch in range(self.n_epochs):
             start_time = time.time()
@@ -308,8 +344,8 @@ class PPO:
             policy_losses, value_losses, entropy_list = self.update_model()
             self.entropy_coef *= self.entropy_coef_decay # less exploration for later times
             # save model
-            if epoch % self.save_rate == 0:
-                self.save(epoch, self.model_name)
+            if (epoch+1) % self.save_rate == 0:
+                self.save(epoch+1, self.model_name)
                 evaluation(self.args, self.model)
             
             # print results

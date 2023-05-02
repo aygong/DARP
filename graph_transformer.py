@@ -27,7 +27,7 @@ class GraphTransformerNet(nn.Module):
                  d_k=64,
                  d_v=64,
                  #d_ff=2048,
-                 d_last_ff=1024,
+                 d_ff=1024,
                  dropout=0.1,
                  #in_feat_dropout=0.0,
                  layer_norm=False,
@@ -71,20 +71,28 @@ class GraphTransformerNet(nn.Module):
         self.layers = nn.ModuleList([ GraphTransformerLayer(d_model, d_model, num_heads, dropout,
                                                     self.layer_norm, self.batch_norm, self.residual) for _ in range(num_layers) ]) 
         #self.layers.append(GraphTransformerLayer(hidden_dim, out_dim, num_heads, dropout, self.layer_norm, self.batch_norm, self.residual))
+        self.last_policy_transform = GraphTransformerLayer(d_model, d_model, num_heads, dropout, self.layer_norm, self.batch_norm, self.residual)
         #self.MLP_layer = MLPReadout(out_dim, 1)   # 1 out dim since regression problem 
         self.MLP_policy_layer = nn.Sequential(
-            nn.Linear(2 * d_model, d_last_ff), 
+            nn.Linear(2 * d_model, d_ff), 
             nn.ReLU(),
-            nn.Linear(d_last_ff, 1) 
+            nn.Linear(d_ff, 1) 
         )   
 
+        #self.MLP_value_layer = nn.Sequential(
+        #    nn.Linear(num_nodes * d_model, d_last_ff), 
+        #    nn.ReLU(),
+        #    nn.Linear(d_last_ff, 1) 
+        #)
+
+        self.last_value_transform = GraphTransformerLayer(d_model, d_model, num_heads, dropout, self.layer_norm, self.batch_norm, self.residual)
         self.MLP_value_layer = nn.Sequential(
-            nn.Linear(num_nodes * d_model, d_last_ff), 
+            nn.Linear(d_model+1, d_ff), 
             nn.ReLU(),
-            nn.Linear(d_last_ff, 1) 
+            nn.Linear(d_ff, 1) 
         )
         
-    def forward(self, g, h, e, vehicle_node_id, h_lap_pos_enc=None, masking=False):
+    def forward(self, g, h, e, vehicle_node_id, num_nodes, h_lap_pos_enc=None, masking=False):
         # input embedding
         #h = self.node_encoder(h)
         h = self.embedding_h(h)
@@ -98,23 +106,38 @@ class GraphTransformerNet(nn.Module):
         # transformer layers
         for conv in self.layers:
             h, e = conv(g, h, e)
-
+        
+        h_policy, _ = self.last_policy_transform(g,h,e)
         
         batch_size = len(vehicle_node_id)
-        vehicle_node_id = torch.tensor([i*self.num_nodes + k for i,k in enumerate(vehicle_node_id)], device=self.device)
-        ks = vehicle_node_id.repeat_interleave(self.num_nodes).long()
-        pairs = torch.cat([h[ks], h], dim=1)
+        vehicle_node_id = torch.tensor([i*num_nodes + k for i,k in enumerate(vehicle_node_id)], device=self.device)
+        ks = vehicle_node_id.repeat_interleave(num_nodes).long()
+        pairs = torch.cat([h_policy[ks], h_policy], dim=1)
         policy = torch.squeeze(self.MLP_policy_layer(pairs))
 
         if masking:
             neighbors = [g.successors(k) for k in vehicle_node_id]
-            mask = torch.tensor([False if i in neighbors[i//self.num_nodes] else True for i in range(batch_size * self.num_nodes)], device=self.device)
+            mask = torch.tensor([False if i in neighbors[i//num_nodes] else True for i in range(batch_size * num_nodes)], device=self.device)
+            for i in range(batch_size):
+                # mask value nodes
+                mask[(i+1)*num_nodes-1] = True
             policy = policy.masked_fill(mask, -1e6)
         
-        policy = torch.reshape(policy, (batch_size, self.num_nodes))
+        policy = torch.reshape(policy, (batch_size, num_nodes))
 
         # also return value
-        value = self.MLP_value_layer(torch.reshape(h, (batch_size, self.d_model * self.num_nodes)))
+        h_value, _ = self.last_value_transform(g,h,e)
+        value_nodes = torch.zeros((batch_size, self.d_model+1))
+        i=0
+        for v_node in range(num_nodes-1, batch_size*num_nodes, num_nodes):
+            n_neighbors = len(g.successors(v_node))
+            value_nodes[i,:-1] = h_value[v_node]
+            value_nodes[i,-1] = n_neighbors
+            i+=1
+        if i != batch_size:
+            raise RuntimeError(f'i should be equal to batch_size: {i}, {batch_size}')
+        #value = self.MLP_value_layer(torch.reshape(h, (batch_size, self.d_model * self.num_nodes)))
+        value = self.MLP_value_layer(value_nodes)
 
         return policy, torch.squeeze(value)
         

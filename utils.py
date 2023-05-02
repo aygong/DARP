@@ -25,8 +25,11 @@ def euclidean_distance(coord_start, coord_end):
     return math.sqrt((coord_start[0] - coord_end[0]) ** 2 + (coord_start[1] - coord_end[1]) ** 2)
 
 
-def shift_window(time_window, time):
-    return [max(0.0, time_window[0] - time), max(0.0, time_window[1] - time)]
+def shift_window(time_window, time, clip=True):
+    if clip:
+        return [max(0.0, time_window[0] - time), max(0.0, time_window[1] - time)]
+    else:
+        return [time_window[0] - time, time_window[1] - time]
 
 
 def check_window(time_window, time):
@@ -81,6 +84,8 @@ def one_hot_node_type(typ):
         return 3
     elif typ=='destination':
         return 4
+    elif typ=='value':
+        return 5
     else:
         raise ValueError(f'Unknown node type: {typ}.')
     
@@ -103,6 +108,8 @@ def is_edge(darp, u, k_u, t_u, u_next, v, k_v, t_v, v_next):
         return False
     if (t_u == 'source' and not k_u) or (t_v == 'source' and not k_v): # empty source station
         return False
+    if (t_u == 'value' and t_v != 'wait') or (t_v == 'value' and t_u != 'wait'):
+        return True
     if t_u == 'wait' or t_v == 'wait': # waiting node connected to every other node, CHANGE ???
         if (u_next and t_u == 'dropoff') or (v_next and t_v == 'dropoff'):
             # do not connect to wait if next vehicle is on dropoff
@@ -194,3 +201,14 @@ def shuffle_list(*ls):
 
     random.shuffle(l)
     return zip(*l)
+
+def value_partial_fit(scaler, values):
+    scaler.partial_fit(values.reshape(-1,1))
+
+def value_transform(scaler, values):
+    new_vals = scaler.transform(values.reshape(-1,1))
+    return torch.from_numpy(new_vals.squeeze())
+
+def value_inverse_transform(scaler, values):
+    new_vals = scaler.inverse_transform(values.detach().reshape(-1,1))
+    return torch.from_numpy(new_vals.squeeze())

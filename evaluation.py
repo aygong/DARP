@@ -11,7 +11,7 @@ from graph_transformer import GraphTransformerNet
 import multiprocessing
 import concurrent.futures
 
-def evaluation(args, model=None):
+def evaluation(args, model=None, verbose=True):
     # Determine if your system supports CUDA
     cuda_available = torch.cuda.is_available()
     device = get_device(cuda_available)
@@ -32,16 +32,21 @@ def evaluation(args, model=None):
         d_ff=args.d_ff,
         dropout=args.dropout)"""
     
+    num_nodes=2*darp.train_N + darp.train_K + 3
+    
     if model == None:
     
         darp.model = GraphTransformerNet(
             device=device,
-            num_nodes=2*darp.train_N + darp.train_K + 2,
-            num_node_feat=17,
+            num_nodes=num_nodes,
+            num_node_feat=18,
             num_edge_feat=3,
-            d_model=128,
-            num_layers=4,
-            num_heads=8,
+            d_model=args.d_model,
+            num_layers=args.num_layers,
+            num_heads=args.num_heads,
+            d_k=args.d_k,
+            d_v=args.d_v,
+            d_ff = args.d_ff,
             dropout=0.1
         )
 
@@ -86,17 +91,19 @@ def evaluation(args, model=None):
     src_mask = torch.Tensor(src_mask).to(device)
 
     for num_instance in range(args.num_tt_instances):
-        print('--------Evaluation on Instance {}:--------'.format(num_instance + 1))
+        if verbose:
+            print('--------Evaluation on Instance {}:--------'.format(num_instance + 1))
         start = t.time()
         true_cost = darp.reset(num_instance)
 
         if args.beam:
             darps = beam_search(darp, num_instance, src_mask, args.beam)
-            print('\n--------Beam results:--------')
-            for darp in darps:
-                print(round(darp[0].cost(), 2), round(abs(true_cost - darp[0].cost()) / true_cost * 100, 2),
-                      len(darp[0].break_window), len(set(darp[0].break_ride_time)), round(darp[0].time_penalty, 2))
-            print()
+            if verbose:
+                print('\n--------Beam results:--------')
+                for darp in darps:
+                    print(round(darp[0].cost(), 2), round(abs(true_cost - darp[0].cost()) / true_cost * 100, 2),
+                        len(darp[0].break_window), len(set(darp[0].break_ride_time)), round(darp[0].time_penalty, 2))
+                print()
             darp, darp_cost = beam_choose(darps)
         else:
             darp_cost = greedy_evaluation(darp, num_instance, src_mask)
@@ -105,17 +112,20 @@ def evaluation(args, model=None):
         # Evaluate the predicted results
         for k in range(0, darp.test_K):
             vehicle = darp.vehicles[k]
-            print('> Vehicle {}'.format(vehicle.id))
+            if verbose:
+                print('> Vehicle {}'.format(vehicle.id))
             # Apply the node-user mapping
             for r, node in enumerate(vehicle.route):
                 if 0 < node < 2 * darp.test_N + 1:
                     vehicle.route[r] = darp.node2user[node]
             # Print the Rist's route of the vehicle
             rist_route = zip(vehicle.route[1:-1], vehicle.schedule[1:-1])
-            print('Rist\'s route:', [term[0] for term in rist_route])
+            if verbose:
+                print('Rist\'s route:', [term[0] for term in rist_route])
             # Print the predicted route of the vehicle
             pred_route = zip(vehicle.pred_route[1:-1], vehicle.pred_schedule[1:-1])
-            print('Predicted route:', [term[0] for term in pred_route])
+            if verbose:
+                print('Predicted route:', [term[0] for term in pred_route])
 
         run_time = end - start
         # Append the lists of metrics
@@ -129,27 +139,28 @@ def evaluation(args, model=None):
         eval_run_time.append(run_time)
         eval_time_penalty.append(darp.time_penalty)
 
-        # Print the Rist's cost, the predicted cost, and the relative difference
-        print('> Objective')
-        print('Rist\'s cost: {:.4f}'.format(eval_rist_cost[-1]))
-        print('Predicted cost: {:.4f}'.format(eval_pred_cost[-1]))
-        print('Relative difference (%): {:.2f}'.format(eval_rela_diff[-1]))
+        if verbose:
+            # Print the Rist's cost, the predicted cost, and the relative difference
+            print('> Objective')
+            print('Rist\'s cost: {:.4f}'.format(eval_rist_cost[-1]))
+            print('Predicted cost: {:.4f}'.format(eval_pred_cost[-1]))
+            print('Relative difference (%): {:.2f}'.format(eval_rela_diff[-1]))
 
-        # Print the number of broken constraints
-        print('> Constraint')
-        print('# broken time window: {}'.format(eval_window[-1]))
-        print('# broken ride time: {}\n'.format(eval_ride_time[-1]))
+            # Print the number of broken constraints
+            print('> Constraint')
+            print('# broken time window: {}'.format(eval_window[-1]))
+            print('# broken ride time: {}\n'.format(eval_ride_time[-1]))
 
-        with open(path_result + 'evaluation_log.txt', 'a+') as file:
-            json.dump({
-                'Num instance': num_instance,
-                'Rist\'s cost': '{:.4f}'.format(eval_rist_cost[-1]),
-                'Predicted cost': '{:.4f}'.format(eval_pred_cost[-1]),
-                '# broken time window': eval_window[-1],
-                '# broken ride time': eval_ride_time[-1],
-                'run time': eval_run_time[-1],
-            }, file)
-            file.write("\n")
+            with open(path_result + 'evaluation_log.txt', 'a+') as file:
+                json.dump({
+                    'Num instance': num_instance,
+                    'Rist\'s cost': '{:.4f}'.format(eval_rist_cost[-1]),
+                    'Predicted cost': '{:.4f}'.format(eval_pred_cost[-1]),
+                    '# broken time window': eval_window[-1],
+                    '# broken ride time': eval_ride_time[-1],
+                    'run time': eval_run_time[-1],
+                }, file)
+                file.write("\n")
 
     # Print the metrics on one standard instance
     print('--------Metrics on one standard instance:--------')
