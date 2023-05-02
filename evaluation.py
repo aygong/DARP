@@ -11,49 +11,42 @@ from graph_transformer import GraphTransformerNet
 import multiprocessing
 import concurrent.futures
 
-def evaluation(args):
+def evaluation(args, model=None):
     # Determine if your system supports CUDA
     cuda_available = torch.cuda.is_available()
     device = get_device(cuda_available)
 
     darp = Darp(args, mode='evaluate', device=device)
 
-    # Create a model
-    """darp.model = Transformer(
-        device=device,
-        num_vehicles=darp.train_K,
-        input_seq_len=darp.train_N,
-        target_seq_len=darp.train_N + 2,
-        d_model=args.d_model,
-        num_layers=args.num_layers,
-        num_heads=args.num_heads,
-        d_k=args.d_k,
-        d_v=args.d_v,
-        d_ff=args.d_ff,
-        dropout=args.dropout)"""
+    num_nodes = 2*darp.train_N + darp.train_K + 2
+
+    if model == None:
     
-    darp.model = GraphTransformerNet(
-        device=device,
-        num_nodes=2*darp.train_N + darp.train_K + 2,
-        num_node_feat=17,
-        num_edge_feat=3,
-        d_model=128,
-        num_layers=4,
-        num_heads=8,
-        dropout=0.1
-    )
+        darp.model = GraphTransformerNet(
+            device=device,
+            num_nodes=num_nodes,
+            num_node_feat=17,
+            num_edge_feat=3,
+            d_model=128,
+            num_layers=4,
+            num_heads=8,
+            dropout=0.1
+        )
 
-    # Load the trained model
-    model_name = darp.train_name + '-' + str(args.wait_time)
-    if args.model_type:
-        model = "rl"
-        print("Load the model trained by reinforcement learning.\n")
+        # Load the trained model
+        model_name = darp.train_name + '-' + str(args.wait_time)
+        if args.model_type:
+            model = "rl"
+            print("Load the model trained by reinforcement learning.\n")
+        else:
+            model = "sl"
+            print("Load the model trained by supervised learning.\n")
+
+        checkpoint = torch.load('./model/' + model + '-' + model_name + '.model')
+        darp.model.load_state_dict(checkpoint['model_state_dict'])
     else:
-        model = "sl"
-        print("Load the model trained by supervised learning.\n")
+        darp.model=model
 
-    checkpoint = torch.load('./model/' + model + '-' + model_name + '.model')
-    darp.model.load_state_dict(checkpoint['model_state_dict'])
     darp.model.eval()
     #torch.no_grad()
 
@@ -235,19 +228,13 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
                 continue
             
             darp.beta(k)
-            #state = darp.state(k, time)
             state, next_vehicle_node = darp.state_graph(k, time)
             action_node, probs = darp.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
             action = darp.node2action(action_node)
             darp.log_probs.append(torch.log(probs.squeeze(0)[action]))
-            #print('not passing, action: ', action)
-            #print('neighbors: ', state.successors(next_vehicle_node))
-            #print('time: ', time)
-            #for n in state.successors(next_vehicle_node):
-            #    print(state.ndata['feat'][n])
+
             darp.evaluate_step(k, action)
-            #print(f'action: {action}, remaining vehicles: {[k.coords for k in darp.vehicles]}')
-            #print(f'users not done: {[u.alpha for u in darp.users]}')
+
     return darp.cost()
 
 def add_candidates(envs, env, state, k_best_new, beam_width, probs, k, next_vehicle_node, idx, score, n_broken):
@@ -287,7 +274,6 @@ def beam_search(darp, num_instance, src_mask, beam_width):
     k_best = [(darp, False, 0.0, 0)]  # (darp, finish, sumlogprob, n_broken_constraints)
     # Run the simulator
     while sum([done for (env, done, score, n_broken) in k_best]) < beam_width:
-        #print('dones: ', [done for (env, done, score, n_broken) in k_best])
         k_best_new = []
         envs = {}
         i = 0
@@ -297,20 +283,12 @@ def beam_search(darp, num_instance, src_mask, beam_width):
                 waited_too_much = False
                 wait_count_per_vehicle = np.zeros(len(env.vehicles))
                 while waiting:
-                    #if not env.indices:
-                    #    free_times = [vehicle.free_time for vehicle in env.vehicles]
-                    #    time = np.min(free_times)
-                    #    indices = np.argwhere(free_times == time)
-                    #    env.indices = deque(indices.flatten().tolist())
-                    #    env.time = time
+
                     free_times = [vehicle.free_time for vehicle in env.vehicles]
                     time = np.min(free_times)
                     indices = np.argwhere(free_times == time)
                     indices = indices.flatten().tolist()
 
-                    #k = indices.popleft()
-                    #if env.vehicles[k].free_time == 1440:
-                    #    continue
                     k = indices[0]
                     if env.vehicles[k].free_time == 1440:
                         if sum(wait_count_per_vehicle) > 0:
@@ -320,29 +298,14 @@ def beam_search(darp, num_instance, src_mask, beam_width):
                             raise RuntimeError(f'Environment should be done if next free time is 1440, free_times: {free_times}, wait_count: {wait_count_per_vehicle}')
 
                     env.beta(k)
-                    #state = env.state(k, env.time)
                     state, next_vehicle_node = env.state_graph(k, time)
-                    #action, outputs = env.predict(state, user_mask=None, src_mask=src_mask)
                     action_node, probs = env.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
                     action = env.node2action(action_node)
-                    #print(f'action: {action}')#, probs: {probs}')
-                    #print(f'free times: {free_times}, env time: {time}')
-                    #print(f'neighbors: {state.successors(next_vehicle_node)}')
+
                     if action == env.train_N + 1: # Waiting action
-                        #print(f'waiting: {wait_count_per_vehicle[k]}, free_times: {free_times}')
                         if wait_count_per_vehicle[k] == 0:
                             # Save other actions to keep possibility of not waiting
                             add_candidates(envs, env, state, k_best_new, beam_width, probs, k, next_vehicle_node, i, score, n_broken)
-
-                            #log_probs, other_action_nodes = torch.topk(torch.log(probs.squeeze(0)[1:]), min(beam_width, len(state.successors(next_vehicle_node))-1)) # -1 to not take into account waiting node
-                            #envs[i] = copy.deepcopy(env)
-                            #for log_prob, other_action_node in zip(log_probs, other_action_nodes):
-                            #    other_action_node += 1 # Shift because we removed waiting action
-                            #    if other_action_node.item() not in state.successors(next_vehicle_node): #state.successors(torch.tensor([next_vehicle_node], device=env.device)):
-                            #        print(f'ACTION NODE {other_action_node} NOT IN NEIGHBORS: {state.successors(next_vehicle_node)}, LOG_PROB: {log_prob}')
-                            #    # expand each current candidate
-                            #    other_action = env.node2action(other_action_node)
-                            #    k_best_new.append((i, score - log_prob.item(), k, other_action.item(), n_broken))
                             i += 1
                         env.evaluate_step(k, action)
                         wait_count_per_vehicle[k] += 1
@@ -350,14 +313,6 @@ def beam_search(darp, num_instance, src_mask, beam_width):
                         waiting = False
                 if not waited_too_much:
                     add_candidates(envs, env, state, k_best_new, beam_width, probs, k, next_vehicle_node, i, score, n_broken)
-                    #log_probs, action_nodes = torch.topk(torch.log(probs.squeeze(0)[1:]), min(beam_width, len(state.successors(next_vehicle_node))-1)) # -1 to not take into account waiting node
-                    #print(f'vehicle id: {k}, vehicle node: {next_vehicle_node}, succs: {state.successors(next_vehicle_node)}, time: {[vehicle.free_time for vehicle in env.vehicles]}')
-                    #envs[i] = copy.deepcopy(env)
-                    #for log_prob, action_node in zip(log_probs, action_nodes):
-                    #    action_node += 1 # Shift because we removed waiting action
-                    #    # expand each current candidate
-                    #    action = env.node2action(action_node)
-                    #    k_best_new.append((i, score - log_prob.item(), k, action.item(), n_broken))
                     i += 1
 
         # order by score, select k best

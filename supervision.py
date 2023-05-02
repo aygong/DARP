@@ -56,27 +56,17 @@ def supervision(args):
     cuda_available = torch.cuda.is_available()
     device = get_device(cuda_available)
 
-    """model = Transformer(
+    num_nodes = 2*train_N + train_K + 2
+    model = GraphTransformerNet(
         device=device,
-        num_vehicles=train_K,
-        input_seq_len=train_N,
-        target_seq_len=train_N + 2,
+        num_nodes=num_nodes,
+        num_node_feat=17,
+        num_edge_feat=3,
         d_model=args.d_model,
         num_layers=args.num_layers,
         num_heads=args.num_heads,
         d_k=args.d_k,
         d_v=args.d_v,
-        d_ff=args.d_ff,
-        dropout=args.dropout)"""
-    
-    model = GraphTransformerNet(
-        device=device,
-        num_nodes=2*train_N + train_K + 2,
-        num_node_feat=17,
-        num_edge_feat=3,
-        d_model=128,
-        num_layers=4,
-        num_heads=8,
         dropout=0.1
     )
 
@@ -106,6 +96,9 @@ def supervision(args):
         model.train()
 
         for _, (graphs, ks, action_nodes, values) in enumerate(train_data):
+            if cuda_available:
+                torch.cuda.empty_cache()
+
             iters += 1
             ks = ks.to(device)
             action_nodes = action_nodes.to(device)
@@ -116,7 +109,7 @@ def supervision(args):
 
             optimizer.zero_grad()
 
-            policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, masking=True)
+            policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, num_nodes, masking=True)
             policy_loss = criterion_policy(policy_outputs, action_nodes)
             value_loss = 0#criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
             
@@ -163,7 +156,7 @@ def supervision(args):
                     batch_x = graphs.ndata['feat'].to(device)
                     batch_e = graphs.edata['feat'].to(device)
 
-                    policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, masking=True)
+                    policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, num_nodes, masking=True)
                     policy_loss = criterion_policy(policy_outputs, action_nodes)
                     value_loss = 0#criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
                     loss =  policy_loss + value_loss * args.loss_ratio
