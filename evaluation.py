@@ -18,15 +18,13 @@ def evaluation(args, model=None):
 
     darp = Darp(args, mode='evaluate', device=device)
 
-    num_nodes = 2*darp.train_N + darp.train_K + 2
-
     if model == None:
     
         darp.model = GraphTransformerNet(
             device=device,
-            num_nodes=num_nodes,
+            num_nodes=darp.num_nodes,
             num_node_feat=17,
-            num_edge_feat=3,
+            num_edge_feat=5,
             d_model=128,
             num_layers=4,
             num_heads=8,
@@ -224,7 +222,7 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
         indices = indices.flatten().tolist()
 
         for _, k in enumerate(indices):
-            if darp.vehicles[k].free_time == 1440:
+            if darp.vehicles[k].free_time >= 1440:
                 continue
             
             darp.beta(k)
@@ -232,7 +230,6 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
             action_node, probs = darp.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
             action = darp.node2action(action_node)
             darp.log_probs.append(torch.log(probs.squeeze(0)[action]))
-
             darp.evaluate_step(k, action)
 
     return darp.cost()
