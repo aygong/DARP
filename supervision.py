@@ -70,7 +70,7 @@ def supervision(args):
         dropout=0.1
     )
 
-    model_name = name + '-' + str(args.wait_time)
+    model_name = name + '-' + str(args.wait_time) +'-'+ str(args.filename_index)
 
     if cuda_available:
         model.cuda()
@@ -200,7 +200,7 @@ def supervision(args):
     print("Total execution time: {:.4f} seconds.\n".format(np.sum(exec_times)))
 
     #fig, ax = plt.subplots()
-    file_name = 'accuracy-' + name + '-' + str(args.wait_time)
+    file_name = 'accuracy-' + name + '-' + str(args.wait_time) + '-' + str(args.filename_index)
     #ax.plot(np.arange(epochs), train_policy_performance, label="Training accuracy")
     #ax.plot(np.arange(epochs), valid_policy_performance, label="Validation accuracy")
     #ax.set_xlabel('Epoch')

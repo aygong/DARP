@@ -28,7 +28,7 @@ def reinforce(args):
         dropout=args.dropout)
 
     # Load the trained model
-    model_name = darp.train_name + '-' + str(args.wait_time)
+    model_name = darp.train_name + '-' + str(args.wait_time) +'-'+ str(args.filename_index)
     checkpoint = torch.load('./model/sl-' + model_name + '.model')
     darp.model.load_state_dict(checkpoint['model_state_dict'])
     darp.model.train()

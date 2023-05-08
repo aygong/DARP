@@ -36,7 +36,7 @@ def evaluation(args, model=None):
         )
 
         # Load the trained model
-        model_name = darp.train_name + '-' + str(args.wait_time)
+        model_name = darp.train_name + '-' + str(args.wait_time) +'-'+ str(args.filename_index)
         if args.model_type:
             model = "rl"
             print("Load the model trained by reinforcement learning.\n")

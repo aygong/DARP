@@ -10,9 +10,9 @@ def parse_arguments():
 
     # Arguments of dataset.py
     parser.add_argument('--dataset', type=int, default=1) # 0 for false, 1 for true
-    parser.add_argument('--train_index', type=int, default=8)
+    parser.add_argument('--train_index', type=int, default=2)
     parser.add_argument('--num_sl_subsets', type=int, default=1)
-    parser.add_argument('--num_sl_instances', type=int, default=100)
+    parser.add_argument('--num_sl_instances', type=int, default=10)
     parser.add_argument('--wait_time', type=int, default=7)
 
     # Arguments of supervision.py
@@ -29,7 +29,7 @@ def parse_arguments():
     # Arguments of evaluation.py
     parser.add_argument('--evaluation', type=int, default=1) # 0 for false, 1 for true
     parser.add_argument('--model_type', type=int, default=0)  # 1: RL, 0: SL
-    parser.add_argument('--test_index', type=int, default=8)
+    parser.add_argument('--test_index', type=int, default=2)
     parser.add_argument('--num_tt_instances', type=int, default=10)
     parser.add_argument('--beam', type=int, default=0)
 
@@ -41,6 +41,9 @@ def parse_arguments():
     parser.add_argument('--d_v', type=int, default=64)
     parser.add_argument('--d_ff', type=int, default=2048)
     parser.add_argument('--dropout', type=float, default=0.1)
+
+    # Argument for saving
+    parser.add_argument('--filename_index', type=int, default=0)
 
     args = parser.parse_args()
 
