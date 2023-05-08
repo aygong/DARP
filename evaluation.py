@@ -21,15 +21,17 @@ def evaluation(args, model=None):
     num_nodes = 2*darp.train_N + darp.train_K + 2
 
     if model == None:
-    
+
         darp.model = GraphTransformerNet(
             device=device,
             num_nodes=num_nodes,
             num_node_feat=17,
             num_edge_feat=3,
-            d_model=128,
-            num_layers=4,
-            num_heads=8,
+            d_model=args.d_model,
+            num_layers=args.num_layers,
+            num_heads=args.num_heads,
+            d_k=args.d_k,
+            d_v=args.d_v,
             dropout=0.1
         )
 
