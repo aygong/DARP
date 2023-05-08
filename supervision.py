@@ -77,7 +77,7 @@ def supervision(args):
 
     criterion_policy = nn.CrossEntropyLoss()
     criterion_value = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
     epochs = args.epochs

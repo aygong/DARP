@@ -44,7 +44,7 @@ def evaluation(args, model=None):
             model = "sl"
             print("Load the model trained by supervised learning.\n")
 
-        checkpoint = torch.load('./model/' + model + '-' + model_name + '.model')
+        checkpoint = torch.load('./model/' + model + '-' + model_name + '.model', map_location=device)
         darp.model.load_state_dict(checkpoint['model_state_dict'])
     else:
         darp.model=model
