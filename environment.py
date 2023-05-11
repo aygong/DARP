@@ -242,6 +242,10 @@ class Darp:
                 if i != j:
                     self.arcs[(i, j)] = True
 
+        # Do not perform arc elimination if not requested
+        if not self.args.arc_elimination:
+            return
+        
         # Pick-up sources
         for i in range(N):
             node = Node()
@@ -334,7 +338,7 @@ class Darp:
         # Time windows and pairing of requests
         for i in range(1, N + 1):
             for j in range(0, 2 * N + 2):
-                if N + i != j:
+                if N + i != j and i != j:
                     node_i = self.nodes[i]
                     node_n = self.nodes[N + i]
                     node_j = self.nodes[j]
