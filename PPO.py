@@ -27,7 +27,8 @@ class PPO:
             path_result,
             entropy_coef = 1e-3,
             entropy_coef_decay = 0.99,
-            constraint_penalty_alpha = 10.0
+            constraint_penalty_alpha = 10.0,
+            constraint_base_penalty = 10.0
             ):
         
         self.args = args
@@ -47,6 +48,7 @@ class PPO:
         self.save_rate = save_rate
         self.path_result = path_result
         self.constraint_penalty_alpha = constraint_penalty_alpha
+        self.constraint_base_penalty = constraint_base_penalty
         
         # Episodes data
         self.states = []
@@ -57,6 +59,7 @@ class PPO:
         self.values = []
         self.vehicle_node_ids = []
 
+        # Darp setup
         self.darp = Darp(args, mode='reinforce', device=device)
         self.darp.model = GraphTransformerNet(
             device=device,
@@ -69,7 +72,7 @@ class PPO:
             dropout=0.1
         )
         
-        checkpoint = torch.load('./model/sl-' + model_name + '.model')
+        checkpoint = torch.load('./model/sl-' + model_name + '.model', map_location=device)
         self.darp.model.load_state_dict(checkpoint['model_state_dict'])
         
         self.darp.model.to(device)
@@ -78,7 +81,9 @@ class PPO:
         self.criterion_value = torch.nn.MSELoss()
 
     def greedy_action(self, graph, vehicle_node_id):
-        # Select action with max probability
+        """
+        Select action with max probability
+        """
         graph = graph.to(self.device)
         k = torch.tensor([vehicle_node_id], device=self.device)
         x = graph.ndata['feat'].to(self.device)
@@ -92,7 +97,9 @@ class PPO:
         return a, p, value
     
     def select_action(self, graph, vehicle_node_id):
-        # Stochastic action selection for one state
+        """
+        Stochastic action selection for one state
+        """
         graph = graph.to(self.device)
         k = torch.tensor([vehicle_node_id], device=self.device)
         x = graph.ndata['feat'].to(self.device)
@@ -141,8 +148,10 @@ class PPO:
 
     
     def collect_data(self):
-        # Collect data for collect_episodes episodes.
-        # Data = s, a, r, s_prime, pi_a, done
+        """
+        Collect data for self.collect_episodes episodes.
+        Data = s, a, r, pi_a, done
+        """
         rl_instances = list(range(self.args.num_rl_instances))
         random.shuffle(rl_instances)
         rl_instances_iter = iter(rl_instances)
@@ -164,6 +173,10 @@ class PPO:
                 travel_time, constraint_penalty = self.darp.evaluate_step(k, action)
                 transition_cost = travel_time 
                 done = not self.darp.finish()
+
+                if constraint_penalty > 1e-3:
+                    # If a constraint was broken, add the base amount
+                    constraint_penalty += self.constraint_base_penalty
 
                 if done:
                     # give large penalty for users that are not served correctly
@@ -289,7 +302,7 @@ class PPO:
     
     def train(self):
         # Train policy and value networks on collected data
-        self.model.train()
+        self.model.eval()
         
         # Loop:
         for epoch in range(self.n_epochs):
@@ -342,3 +355,4 @@ class PPO:
     
 
 
+ 
