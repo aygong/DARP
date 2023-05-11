@@ -26,7 +26,7 @@ class GraphTransformerNet(nn.Module):
                  d_k=64,
                  d_v=64,
                  #d_ff=2048,
-                 d_last_ff=1024,
+                 d_ff=1024,
                  dropout=0.1,
                  #in_feat_dropout=0.0,
                  layer_norm=False,
@@ -69,9 +69,9 @@ class GraphTransformerNet(nn.Module):
         #self.layers.append(GraphTransformerLayer(hidden_dim, out_dim, num_heads, dropout, self.layer_norm, self.batch_norm, self.residual))
         #self.MLP_layer = MLPReadout(out_dim, 1)   # 1 out dim since regression problem 
         self.MLP_layer = nn.Sequential(
-            nn.Linear(2 * d_model, d_last_ff), 
+            nn.Linear(2 * d_model, d_ff), 
             nn.ReLU(),
-            nn.Linear(d_last_ff, 1) 
+            nn.Linear(d_ff, 1) 
         )      
         
     def forward(self, g, h, e, vehicle_node_id, num_nodes, h_lap_pos_enc=None, masking=False):

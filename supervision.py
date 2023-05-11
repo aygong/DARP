@@ -67,6 +67,7 @@ def supervision(args):
         num_heads=args.num_heads,
         d_k=args.d_k,
         d_v=args.d_v,
+        d_ff=args.d_ff,
         dropout=0.1
     )
 

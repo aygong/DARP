@@ -40,7 +40,7 @@ def parse_arguments():
     parser.add_argument('--num_heads', type=int, default=16)
     parser.add_argument('--d_k', type=int, default=128)
     parser.add_argument('--d_v', type=int, default=128)
-    parser.add_argument('--d_ff', type=int, default=2048)
+    parser.add_argument('--d_ff', type=int, default=1024)
     parser.add_argument('--dropout', type=float, default=0.1)
 
     # Argument for saving
