@@ -30,7 +30,9 @@ class PPO:
             entropy_coef = 1e-3,
             entropy_coef_decay = 0.99,
             constraint_penalty_alpha = 10.0,
-            constraint_base_penalty = 10.0
+            constraint_base_penalty = 10.0,
+            use_gae = True,
+            gae_lambda = 0.95
             ):
         
         self.args = args
@@ -52,6 +54,8 @@ class PPO:
         self.num_eval_instances = num_eval_instances
         self.constraint_penalty_alpha = constraint_penalty_alpha
         self.constraint_base_penalty = constraint_base_penalty
+        self.use_gae = use_gae
+        self.gae_lambda = gae_lambda
         
         # Episodes data
         self.states = []
@@ -215,15 +219,29 @@ class PPO:
         # Compute returns of trajectories
         self.returns = np.zeros(len(self.costs))
         with torch.no_grad():
-            for t in reversed(range(len(self.costs))):
-                if t == len(self.costs) - 1:
-                    next_return = 0
-                else:
-                    next_return = self.returns[t+1]
-                nextnonterminal = 0 if self.dones[t] else 1
-                self.returns[t] = self.costs[t] + nextnonterminal * next_return
-            self.advantages = (np.array(self.values) - self.returns) /(np.array(self.values)) # the smaller the returns (cost) the better
-            
+            if self.use_gae:
+                self.advantages = np.zeros_like(self.costs)
+                last_gae = 0
+                for t in reversed(range(len(self.costs))):
+                    if t == len(self.costs) - 1:
+                        next_value = 0
+                    else:
+                        next_value = self.values[t+1]
+                    nextnonterminal = 0 if self.dones[t] else 1
+                    delta = self.costs[t] + next_value * nextnonterminal - self.values[t]
+                    last_gae = delta + self.gae_lambda * nextnonterminal * last_gae
+                    self.advantages[t] = -last_gae # advantage: positive:good, negative:bad
+                self.returns = -self.advantages + np.array(self.values) # returns: large:bad, small:good (correspond to total cost)
+            else:
+                for t in reversed(range(len(self.costs))):
+                    if t == len(self.costs) - 1:
+                        next_return = 0
+                    else:
+                        next_return = self.returns[t+1]
+                    nextnonterminal = 0 if self.dones[t] else 1
+                    self.returns[t] = self.costs[t] + nextnonterminal * next_return
+                self.advantages = (np.array(self.values) - self.returns) /(np.array(self.values)) # the smaller the returns (cost) the better
+                
     
     
 
@@ -439,7 +457,7 @@ class PPO:
         return self.model
     
     def save(self, episode, model_name):
-        with open('ppo_data.pkl', 'wb') as fp:
+        with open(self.path_result + 'ppo_data.pkl', 'wb') as fp:
             pickle.dump(self.eval_data, fp)
 
         torch.save({
