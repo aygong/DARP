@@ -25,7 +25,7 @@ def reinforce_PPO(args):
             clip_rate=0.2,
             value_loss_coef=1.0,
             batch_size=args.batch_size,
-            n_epochs=100,
+            n_epochs=6,
             collect_episodes=10,
             update_epochs=3,
             num_instances=args.num_rl_instances,

@@ -7,6 +7,7 @@ from utils import *
 from evaluation import *
 from graph_transformer import GraphTransformerNet
 import time
+import pickle
 
 class PPO:
     def __init__(
@@ -25,6 +26,7 @@ class PPO:
             num_instances,
             save_rate,
             path_result,
+            num_eval_instances=20,
             entropy_coef = 1e-3,
             entropy_coef_decay = 0.99,
             constraint_penalty_alpha = 10.0,
@@ -47,6 +49,7 @@ class PPO:
         self.num_instances = num_instances
         self.save_rate = save_rate
         self.path_result = path_result
+        self.num_eval_instances = num_eval_instances
         self.constraint_penalty_alpha = constraint_penalty_alpha
         self.constraint_base_penalty = constraint_base_penalty
         
@@ -58,6 +61,10 @@ class PPO:
         self.dones = []
         self.values = []
         self.vehicle_node_ids = []
+
+        # Evaluation data
+        self.eval_data = {x:[] for x in ['epoch', 'rist_cost', 'eval_cost', 'rela_diff', 'broken_window', 'broken_ride_time', 'time_penalty', 'run_time']}
+
 
         # Darp setup
         self.darp = Darp(args, mode='reinforce', device=device)
@@ -300,6 +307,89 @@ class PPO:
 
         return policy_losses, value_losses, entropy_list
     
+    def quick_evaluation(self, epoch):
+        eval_darp = Darp(self.args, mode='evaluate', device=self.device)
+        eval_darp.model = self.darp.model
+
+            # Initialize the lists of metrics
+        eval_run_time = []
+        eval_time_penalty = []
+        eval_rist_cost = []
+        eval_pred_cost = []
+        eval_window = []
+        eval_ride_time = []
+        eval_not_same = []
+        eval_not_done = []
+        eval_rela_diff = []
+
+        for num_instance in range(self.num_eval_instances):
+            print('--------Evaluation on Instance {}:--------'.format(num_instance + 1))
+            start = t.time()
+            true_cost = eval_darp.reset(num_instance)
+
+            with torch.no_grad():
+                darp_cost = greedy_evaluation(eval_darp, num_instance, None)
+            end = t.time()
+
+            run_time = end - start
+            # Append the lists of metrics
+            eval_rist_cost.append(true_cost)
+            eval_pred_cost.append(darp_cost)
+            eval_window.append(len(eval_darp.break_window))
+            eval_ride_time.append(len(set(eval_darp.break_ride_time)))
+            eval_not_same.append(len(eval_darp.break_same))
+            eval_not_done.append(len(eval_darp.break_done))
+            eval_rela_diff.append(abs(true_cost - darp_cost) / true_cost * 100)
+            eval_run_time.append(run_time)
+            eval_time_penalty.append(eval_darp.time_penalty)
+
+        # Print the metrics on multiple random instances
+        print('--------Average metrics on {} random instances:--------'.format(self.num_eval_instances))
+        print('Aver. Cost (Rist 2021): {:.2f}'.format(sum(eval_rist_cost) / len(eval_rist_cost)))
+        print('Aver. Cost (predicted): {:.2f}'.format(sum(eval_pred_cost) / len(eval_pred_cost)))
+        print('Aver. Diff. (%): {:.2f}'.format(sum(eval_rela_diff) / len(eval_rela_diff)))
+        print('Aver. # Time Window: {:.2f}'.format(sum(eval_window) / len(eval_window)))
+        print('Aver. # Ride Time: {:.2f}'.format(sum(eval_ride_time) / len(eval_ride_time)))
+        print('Aver. Time penalty: {:.2f}'.format(sum(eval_time_penalty) / len(eval_time_penalty)))
+        print('Aver. Run time: {:.2f}'.format(sum(eval_run_time) / len(eval_run_time)))
+
+        # Print the number of problematic requests
+        print('# Not Same: {}'.format(np.sum(np.asarray(eval_not_same) > 0)))
+        print('# Not Done: {}'.format(np.sum(np.asarray(eval_not_done) > 0)))
+
+        os.makedirs(self.path_result, exist_ok=True)
+
+        with open(self.path_result + 'evaluation.txt', 'a+') as output:
+
+            # Dump the metrics on multiple random instances
+            json.dump({
+                'Aver. Cost (Rist 2021)': round(sum(eval_rist_cost) / len(eval_rist_cost), 2),
+                'Aver. Cost (predicted)': round(sum(eval_pred_cost) / len(eval_pred_cost), 2),
+                'Aver. Diff. (%)': round(sum(eval_rela_diff) / len(eval_rela_diff), 2),
+                'Aver. # Time Window': round(sum(eval_window) / len(eval_window), 2),
+                'Aver. # Ride Time': round(sum(eval_ride_time) / len(eval_ride_time), 2),
+                'Aver. Time penalty': round(sum(eval_time_penalty) / len(eval_time_penalty), 2),
+                'Aver. Run time': round(sum(eval_run_time) / len(eval_run_time), 2),
+            }, output)
+            output.write('\n')
+
+            # Dump the number of problematic requests
+            json.dump({
+                '# Not Same': int(np.sum(np.asarray(eval_not_same) > 0)),
+                '# Not Done': int(np.sum(np.asarray(eval_not_done) > 0)),
+            }, output)
+            output.write('\n')
+
+            self.eval_data['epoch'].append(epoch)
+            self.eval_data['rist_cost'].append(sum(eval_rist_cost) / len(eval_rist_cost))
+            self.eval_data['eval_cost'].append(sum(eval_pred_cost) / len(eval_pred_cost))
+            self.eval_data['rela_diff'].append(sum(eval_rela_diff) / len(eval_rela_diff))
+            self.eval_data['broken_window'].append(sum(eval_window) / len(eval_window))
+            self.eval_data['broken_ride_time'].append(sum(eval_ride_time) / len(eval_ride_time))
+            self.eval_data['time_penalty'].append(sum(eval_time_penalty) / len(eval_time_penalty))
+            self.eval_data['run_time'].append(sum(eval_run_time) / len(eval_run_time))
+
+    
     def train(self):
         # Train policy and value networks on collected data
         self.model.eval()
@@ -322,8 +412,10 @@ class PPO:
             self.entropy_coef *= self.entropy_coef_decay # less exploration for later times
             # save model
             if epoch % self.save_rate == 0:
+                self.quick_evaluation(epoch)
+                print('----- Save results -----')
                 self.save(epoch, self.model_name)
-                evaluation(self.args, self.model)
+                
             
             # print results
             exec_time = time.time() - start_time
@@ -347,6 +439,9 @@ class PPO:
         return self.model
     
     def save(self, episode, model_name):
+        with open('ppo_data.pkl', 'wb') as fp:
+            pickle.dump(self.eval_data, fp)
+
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
