@@ -10,9 +10,11 @@ def parse_arguments():
 
     # Arguments of dataset.py
     parser.add_argument('--dataset', type=int, default=1) # 0 for false, 1 for true
-    parser.add_argument('--train_index', type=int, default=9)
-    parser.add_argument('--num_sl_subsets', type=int, default=1)
-    parser.add_argument('--num_sl_instances', type=int, default=10)
+
+    parser.add_argument('--train_index', type=int, default=0)
+    parser.add_argument('--num_sl_subsets', type=int, default=100)
+    parser.add_argument('--num_sl_instances', type=int, default=500)
+
     parser.add_argument('--wait_time', type=int, default=7)
     parser.add_argument('--arc_elimination', type=int, default=1)
 

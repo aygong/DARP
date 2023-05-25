@@ -246,6 +246,7 @@ class Darp:
         if not self.args.arc_elimination:
             return
         
+
         # Pick-up sources
         for i in range(N):
             node = Node()
@@ -319,7 +320,7 @@ class Darp:
             num_remaining_arcs.append(num_remaining_arcs[-1] - num_eliminated_arcs[-1])
             print("Step 2: # eliminated: {:.0f} -> # remaining: {:.0f}"
                   .format(num_eliminated_arcs[-1], num_remaining_arcs[-1]))
-
+        
         # Time windows
         for i in range(0, 2 * N + 2):
             for j in range(0, 2 * N + 2):
@@ -327,7 +328,7 @@ class Darp:
                     node_i = self.nodes[i]
                     node_j = self.nodes[j]
                     travel_time = euclidean_distance(node_i.coords, node_j.coords)
-                    if node_i.window[0] + node_i.serve_duration + travel_time > node_j.window[1]:
+                    if node_i.window[0] + node_i.serve_duration + travel_time > node_j.window[1] + 1e-3:
                         self.arcs[(i, j)] = False
         if display:
             num_eliminated_arcs.append(num_remaining_arcs[-1] - sum([arc[1] for arc in list(self.arcs.items())]))
@@ -352,9 +353,11 @@ class Darp:
             num_remaining_arcs.append(num_remaining_arcs[-1] - num_eliminated_arcs[-1])
             print("Step 4: # eliminated: {:.0f} -> # remaining: {:.0f}"
                   .format(num_eliminated_arcs[-1], num_remaining_arcs[-1]))
+        
 
             entries = [num_remaining_arcs[0]] + num_eliminated_arcs[1:] + [num_remaining_arcs[-1]]
             print("&", entries[0], "&", entries[1], "&", entries[2], "&", entries[3], "&", entries[4], "&", entries[5])
+
 
     def is_arc_feasible(self, i_u, i_v):
         """
