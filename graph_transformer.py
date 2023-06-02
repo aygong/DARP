@@ -32,7 +32,8 @@ class GraphTransformerNet(nn.Module):
                  layer_norm=False,
                  batch_norm=True,
                  lap_pos_enc=False,
-                 residual=True
+                 residual=True,
+                 pe_dim = 0
                  ):
         
         super().__init__()
@@ -43,6 +44,7 @@ class GraphTransformerNet(nn.Module):
         self.device = device
         self.lap_pos_enc = lap_pos_enc
         self.residual = residual
+        self.pe_dim = pe_dim
         
         if self.lap_pos_enc:
             raise NotImplementedError()
@@ -64,6 +66,9 @@ class GraphTransformerNet(nn.Module):
             d_ff=2*d_model,
             dropout=dropout)
         
+        if self.pe_dim >0:
+            self.embedding_lap_pe = nn.Linear(pe_dim, d_model)
+        
         self.layers = nn.ModuleList([ GraphTransformerLayer(d_model, d_model, num_heads, dropout,
                                                     self.layer_norm, self.batch_norm, self.residual) for _ in range(num_layers) ]) 
         #self.layers.append(GraphTransformerLayer(hidden_dim, out_dim, num_heads, dropout, self.layer_norm, self.batch_norm, self.residual))
@@ -71,19 +76,20 @@ class GraphTransformerNet(nn.Module):
         self.MLP_layer = nn.Sequential(
             nn.Linear(2 * d_model, d_ff), 
             nn.ReLU(),
+            nn.Linear(d_ff, d_ff), 
+            nn.ReLU(),
             nn.Linear(d_ff, 1) 
         )      
         
-    def forward(self, g, h, e, vehicle_node_id, num_nodes, h_lap_pos_enc=None, masking=False):
+    def forward(self, g, h, e, vehicle_node_id, num_nodes, h_lap_pe=None, masking=False):
 
         # input embedding
         #h = self.node_encoder(h)
         h = self.embedding_h(h)
         #h = self.in_feat_dropout(h)
-        if self.lap_pos_enc:
-            #h_lap_pos_enc = self.embedding_lap_pos_enc(h_lap_pos_enc.float()) 
-            #h = h + h_lap_pos_enc
-            raise NotImplementedError()
+        if self.pe_dim > 0 and h_lap_pe:
+            h_lap_pe = self.embedding_lap_pe(h_lap_pe.float())
+            h = h + h_lap_pe
         
         e = self.embedding_e(e)   
         

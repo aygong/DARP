@@ -9,6 +9,8 @@ venvs/
 slurm-*
 *.ipynb
 plots/*
+instance/*.txt
+*.pkl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

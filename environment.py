@@ -379,6 +379,10 @@ class Darp:
         g.add_edges(edges['src'], edges['dst'], data={'feat':torch.tensor(edges['feat'])})
         g = dgl.add_reverse_edges(g, copy_ndata=True, copy_edata=True)
 
+        if self.args.pe_dim:
+            transform = dgl.LaplacianPE(k=self.args.pe_dim, feat_name='PE')
+            g = transform(g)
+
         if next_vehicle_node == -1:
             raise ValueError('No node found for next vehicle')
         return g, next_vehicle_node
@@ -534,16 +538,22 @@ class Darp:
         ks = torch.tensor([vehicle_node_id], device=self.device)
         batch_x = graph.ndata['feat'].to(self.device)
         batch_e = graph.edata['feat'].to(self.device)
+        batch_lap_pe = graph.ndata['PE'].to(self.device)
+        # sign flips
+        sign_flip = torch.rand(batch_lap_pe.size(1)).to(self.device)
+        sign_flip[sign_flip>=0.5] = 1.0; sign_flip[sign_flip<0.5] = -1.0
+        batch_lap_pe = batch_lap_pe * sign_flip.unsqueeze(0)
+
         num_nodes = 2*self.train_N + self.train_K + 2
 
         if self.mode == 'evaluate':
             #pred_mask = [0 if self.users[i].beta == 2 else 1 for i in range(0, self.test_N)] + \
             #            [0 for _ in range(0, self.train_N - self.test_N)] + [1, 1]
             #pred_mask = torch.Tensor(pred_mask).to(self.device)
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, num_nodes, masking=True)
+            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, num_nodes, h_lap_pe=batch_lap_pe, masking=True)
             #policy_outputs = policy_outputs.masked_fill(pred_mask == 0, -1e6)
         else:
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, num_nodes, masking=True)
+            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, num_nodes, h_lap_pe=batch_lap_pe, masking=True)
         probs = f.softmax(policy_outputs, dim=1)
         _, action_node = torch.max(probs, 1)
 
