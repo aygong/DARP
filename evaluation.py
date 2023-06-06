@@ -31,11 +31,12 @@ def evaluation(args, model=None):
             num_heads=args.num_heads,
             d_k=args.d_k,
             d_v=args.d_v,
+            d_ff=args.d_ff,
             dropout=0.1
         )
 
         # Load the trained model
-        model_name = darp.train_name + '-' + str(args.wait_time)
+        model_name = darp.train_name + '-' + str(args.wait_time) +'-'+ str(args.filename_index)
         if args.model_type:
             model = "rl"
             print("Load the model trained by reinforcement learning.\n")

@@ -23,6 +23,7 @@ def parse_arguments():
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--epochs', type=int, default=1)
     parser.add_argument('--loss_ratio', type=int, default=1)
+    parser.add_argument('--lr', type=float, default=1e-3)
 
 
     # Arguments of reinforcement.py
@@ -44,6 +45,9 @@ def parse_arguments():
     parser.add_argument('--d_v', type=int, default=64)
     parser.add_argument('--d_ff', type=int, default=2048)
     parser.add_argument('--dropout', type=float, default=0.1)
+
+    # Argument for saving
+    parser.add_argument('--filename_index', type=int, default=0)
 
     args = parser.parse_args()
 

@@ -67,17 +67,18 @@ def supervision(args):
         num_heads=args.num_heads,
         d_k=args.d_k,
         d_v=args.d_v,
+        d_ff=args.d_ff,
         dropout=0.1
     )
 
-    model_name = name + '-' + str(args.wait_time)
+    model_name = name + '-' + str(args.wait_time) +'-'+ str(args.filename_index)
 
     if cuda_available:
         model.cuda()
 
     criterion_policy = nn.CrossEntropyLoss()
     criterion_value = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
     epochs = args.epochs
@@ -200,7 +201,7 @@ def supervision(args):
     print("Total execution time: {:.4f} seconds.\n".format(np.sum(exec_times)))
 
     #fig, ax = plt.subplots()
-    file_name = 'accuracy-' + name + '-' + str(args.wait_time)
+    file_name = 'accuracy-' + name + '-' + str(args.wait_time) +'-'+ str(args.filename_index)
     #ax.plot(np.arange(epochs), train_policy_performance, label="Training accuracy")
     #ax.plot(np.arange(epochs), valid_policy_performance, label="Validation accuracy")
     #ax.set_xlabel('Epoch')
