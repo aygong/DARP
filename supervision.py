@@ -57,11 +57,13 @@ def supervision(args):
     device = get_device(cuda_available)
 
     num_nodes = 2*train_N + train_K + 2
+    num_edge_feat = 5 if args.arc_elimination else 3 # include feasibility as feature when doing arc elimination
+    
     model = GraphTransformerNet(
         device=device,
         num_nodes=num_nodes,
         num_node_feat=17,
-        num_edge_feat=5,
+        num_edge_feat=num_edge_feat,
         d_model=args.d_model,
         num_layers=args.num_layers,
         num_heads=args.num_heads,

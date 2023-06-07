@@ -548,7 +548,10 @@ class Darp:
                     edges['src'].append(i_u)
                     edges['dst'].append(i_v)
                     #edges['feat'].append(edge_feat)
-                    edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting, feasible, reverse_feasible])
+                    if self.args.arc_elimination:
+                        edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting, feasible, reverse_feasible])
+                    else:
+                        edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting])
 
         g.add_edges(edges['src'], edges['dst'], data={'feat':torch.tensor(edges['feat'])})
         #g = dgl.add_reverse_edges(g, copy_ndata=True, copy_edata=True)
