@@ -9,6 +9,15 @@ import torch.nn.functional as f
 
 import dgl
 
+class Node:
+    # This class is only used to compute the arc elimination function at the beginning of a DARP instance
+    def __init__(self):
+        super(Node, self).__init__()
+
+        self.coords = [0.0, 0.0]
+        self.serve_duration = 0
+        self.load = 0
+        self.window = [0, 0]
 
 class User:
     def __init__(self, mode):
@@ -116,6 +125,8 @@ class Darp:
             self.indices = []  # for beam search
             self.time = 0.0
 
+        self.num_nodes = 2*self.train_N + self.train_K + 2
+
     def load_from_file(self, num_instance=None):
         """ Load the instances from the file, in beam search we load the instances one by one """
         if num_instance:
@@ -209,7 +220,168 @@ class Darp:
             self.break_done = []
             self.time_penalty = 0
 
+        # Create the arcs dictionary
+        self.arc_elimination(display=False)
+
         return instance['objective']  # noqa
+    
+    def arc_elimination(self, display=False):
+        """
+        Computes the arcs dict with pairs of node ids as key and True/False as value. 
+        Useful for eliminating some of the edges in the graph.
+        Node ids follow the same names as in (Cordeau 2006 and Dumas 1991).
+        A conversion from our node ids is required to use it.
+        """
+        # self.eliminated_arcs = []
+        _, N, _, Q, L = self.parameter()
+
+        self.nodes = []
+        self.arcs = {}
+        for i in range(2 * N + 2):
+            for j in range(2 * N + 2):
+                if i != j:
+                    self.arcs[(i, j)] = True
+
+        # Do not perform arc elimination if not requested
+        if not self.args.arc_elimination:
+            return
+        
+
+        # Pick-up sources
+        for i in range(N):
+            node = Node()
+            node.coords = self.users[i].pickup_coords
+            node.serve_duration = self.users[i].serve_duration
+            node.load = self.users[i].load
+            node.window = self.users[i].pickup_window
+            self.nodes.append(node)
+        # Drop-off destinations
+        for i in range(N):
+            node = Node()
+            node.coords = self.users[i].dropoff_coords
+            node.serve_duration = self.users[i].serve_duration
+            node.load = - self.users[i].load
+            node.window = self.users[i].dropoff_window
+            self.nodes.append(node)
+        # Source and destination station
+        source = Node()
+        destination = Node()
+        # Time-window tightening (Section 5.1.1, Cordeau 2006)
+        tightening_e = []
+        tightening_l = []
+        for i in range(2 * N):
+            node = self.nodes[i]
+            tightening_e.append(node.window[0] - euclidean_distance(source.coords, node.coords))
+            tightening_l.append(
+                node.window[1] + node.serve_duration + euclidean_distance(node.coords, destination.coords))
+        source.window[0], source.window[1] = min(tightening_e), max(tightening_l)
+        destination.window[0], destination.window[1] = source.window[0], source.window[1]
+        self.nodes.insert(0, source)
+        self.nodes.append(destination)
+
+        # Basic arc elimination (Cordeau 2006 and Dumas 1991)
+        num_eliminated_arcs = [0]
+        num_remaining_arcs = [sum([arc[1] for arc in list(self.arcs.items())])]
+        if display:
+            print("Step 0: # eliminated: {:.0f} -> # remaining: {:.0f}"
+                  .format(num_eliminated_arcs[-1], num_remaining_arcs[-1]))
+
+        # Priority and Pairing
+        for i in range(1, N + 1):
+            # Priority
+            self.arcs[(0, N + i)] = False
+            self.arcs[(N + i, i)] = False
+            self.arcs[(2 * N + 1, 0)] = False
+            self.arcs[(2 * N + 1, i)] = False
+            self.arcs[(2 * N + 1, N + i)] = False
+            # Pairing
+            self.arcs[(i, 2 * N + 1)] = False
+        if display:
+            num_eliminated_arcs.append(num_remaining_arcs[-1] - sum([arc[1] for arc in list(self.arcs.items())]))
+            num_remaining_arcs.append(num_remaining_arcs[-1] - num_eliminated_arcs[-1])
+            print("Step 1: # eliminated: {:.0f} -> # remaining: {:.0f}"
+                  .format(num_eliminated_arcs[-1], num_remaining_arcs[-1]))
+
+        # Vehicle capacity
+        for i in range(1, N + 1):
+            for j in range(1, N + 1):
+                if i != j:
+                    node_i = self.nodes[i]
+                    node_j = self.nodes[j]
+                    if node_i.load + node_j.load > Q:
+                        self.arcs[(i, j)] = False
+                        self.arcs[(j, i)] = False
+                        self.arcs[(i, N + j)] = False
+                        self.arcs[(j, N + i)] = False
+                        self.arcs[(N + i, N + j)] = False
+                        self.arcs[(N + j, N + i)] = False
+        if display:
+            num_eliminated_arcs.append(num_remaining_arcs[-1] - sum([arc[1] for arc in list(self.arcs.items())]))
+            num_remaining_arcs.append(num_remaining_arcs[-1] - num_eliminated_arcs[-1])
+            print("Step 2: # eliminated: {:.0f} -> # remaining: {:.0f}"
+                  .format(num_eliminated_arcs[-1], num_remaining_arcs[-1]))
+        
+        # Time windows
+        for i in range(0, 2 * N + 2):
+            for j in range(0, 2 * N + 2):
+                if i != j:
+                    node_i = self.nodes[i]
+                    node_j = self.nodes[j]
+                    travel_time = euclidean_distance(node_i.coords, node_j.coords)
+                    if node_i.window[0] + node_i.serve_duration + travel_time > node_j.window[1] + 1e-3:
+                        self.arcs[(i, j)] = False
+        if display:
+            num_eliminated_arcs.append(num_remaining_arcs[-1] - sum([arc[1] for arc in list(self.arcs.items())]))
+            num_remaining_arcs.append(num_remaining_arcs[-1] - num_eliminated_arcs[-1])
+            print("Step 3: # eliminated: {:.0f} -> # remaining: {:.0f}"
+                  .format(num_eliminated_arcs[-1], num_remaining_arcs[-1]))
+
+        # Time windows and pairing of requests
+        for i in range(1, N + 1):
+            for j in range(0, 2 * N + 2):
+                if N + i != j and i != j:
+                    node_i = self.nodes[i]
+                    node_n = self.nodes[N + i]
+                    node_j = self.nodes[j]
+                    travel_time_ij = euclidean_distance(node_i.coords, node_j.coords)
+                    travel_time_jn = euclidean_distance(node_j.coords, node_n.coords)
+                    if travel_time_ij + node_j.serve_duration + travel_time_jn > L:
+                        self.arcs[(i, j)] = False
+                        self.arcs[(j, N + i)] = False
+        if display:
+            num_eliminated_arcs.append(num_remaining_arcs[-1] - sum([arc[1] for arc in list(self.arcs.items())]))
+            num_remaining_arcs.append(num_remaining_arcs[-1] - num_eliminated_arcs[-1])
+            print("Step 4: # eliminated: {:.0f} -> # remaining: {:.0f}"
+                  .format(num_eliminated_arcs[-1], num_remaining_arcs[-1]))
+        
+
+            entries = [num_remaining_arcs[0]] + num_eliminated_arcs[1:] + [num_remaining_arcs[-1]]
+            print("&", entries[0], "&", entries[1], "&", entries[2], "&", entries[3], "&", entries[4], "&", entries[5])
+
+
+    def is_arc_feasible(self, i_u, i_v):
+        """
+        i_u and i_v are indices of nodes as in the state graph.
+        Returns True if the edge between u and v is feasible, i.e the corresponding value is True in the arcs dictionary.
+        """
+        # Converted indices to (Cordeau 2006 and Dumas 1991) indices
+        converted_i_u = i_u
+        converted_i_v = i_v
+        if i_u == 0 or i_v == 0:
+            # Everything is connected to the waiting node
+            return True
+        if i_u >= self.num_nodes - self.train_K:
+            # Source node
+            converted_i_u = 0
+        if i_v >= self.num_nodes - self.train_K:
+            # Source node
+            converted_i_v = 0
+
+        if converted_i_u == converted_i_v:
+            return False
+        return self.arcs[(converted_i_u, converted_i_v)]
+        
+
 
     def beta(self, k):
         #_, N, _, _, _ = self.parameter()
@@ -366,18 +538,27 @@ class Darp:
             'dst':[],
             'feat':[]
         }
-        for i, (i_u, u, k_u, t_u, u_next, u_coords) in enumerate(node_info):
-            for (i_v, v, k_v, t_v, v_next, v_coords) in node_info[i+1:]:
-                if is_edge(self, u, k_u, t_u, u_next, v, k_v, t_v, v_next):
+        for (i_u, u, k_u, t_u, u_next, u_coords) in node_info:
+            for (i_v, v, k_v, t_v, v_next, v_coords) in node_info:
+                if is_edge(self, i_u, u, k_u, t_u, u_next, i_v, v, k_v, t_v, v_next):
                     pairing = 1 if (u and u==v) else 0
                     waiting = 1 if (t_u=='wait' or t_v=='wait') else 0
-                    
+
+                    feasible = int(self.is_arc_feasible(i_u, i_v))
+                    reverse_feasible = int(self.is_arc_feasible(i_u, i_v))
+                    #edge_feat = torch.tensor([euclidean_distance(u_coords, v_coords), pairing, waiting])
+                    #g.add_edges(i_u, i_v, data={'feat':edge_feat})
                     edges['src'].append(i_u)
                     edges['dst'].append(i_v)
-                    edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting])
+                    #edges['feat'].append(edge_feat)
+                    if self.args.arc_elimination:
+                        edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting, feasible, reverse_feasible])
+                    else:
+                        edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting])
+
 
         g.add_edges(edges['src'], edges['dst'], data={'feat':torch.tensor(edges['feat'])})
-        g = dgl.add_reverse_edges(g, copy_ndata=True, copy_edata=True)
+        #g = dgl.add_reverse_edges(g, copy_ndata=True, copy_edata=True)
 
         if self.args.pe_dim:
             transform = dgl.LaplacianPE(k=self.args.pe_dim, feat_name='PE')
@@ -538,6 +719,7 @@ class Darp:
         ks = torch.tensor([vehicle_node_id], device=self.device)
         batch_x = graph.ndata['feat'].to(self.device)
         batch_e = graph.edata['feat'].to(self.device)
+
         batch_lap_pe = graph.ndata['PE'].to(self.device)
         # sign flips
         sign_flip = torch.rand(batch_lap_pe.size(1)).to(self.device)
@@ -550,10 +732,11 @@ class Darp:
             #pred_mask = [0 if self.users[i].beta == 2 else 1 for i in range(0, self.test_N)] + \
             #            [0 for _ in range(0, self.train_N - self.test_N)] + [1, 1]
             #pred_mask = torch.Tensor(pred_mask).to(self.device)
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, num_nodes, h_lap_pe=batch_lap_pe, masking=True)
+            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, self.num_nodes, h_lap_pe=batch_lap_pe, masking=True)
             #policy_outputs = policy_outputs.masked_fill(pred_mask == 0, -1e6)
         else:
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, num_nodes, h_lap_pe=batch_lap_pe, masking=True)
+            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, self.num_nodes, h_lap_pe=batch_lap_pe, masking=True)
+
         probs = f.softmax(policy_outputs, dim=1)
         _, action_node = torch.max(probs, 1)
 

@@ -14,6 +14,7 @@ def parse_arguments():
     parser.add_argument('--num_sl_subsets', type=int, default=10)
     parser.add_argument('--num_sl_instances', type=int, default=10)
     parser.add_argument('--wait_time', type=int, default=7)
+    parser.add_argument('--arc_elimination', type=int, default=1)
 
     # Arguments of supervision.py
     parser.add_argument('--supervision', type=int, default=1) # 0 for false, 1 for true
@@ -45,7 +46,7 @@ def parse_arguments():
     parser.add_argument('--pe_dim', type=int, default=10) # laplacian positional encoding, 0 for no positional encoding
 
     # Argument for saving
-    parser.add_argument('--filename_index', type=int, default=1)
+    parser.add_argument('--filename_index', type=int, default=0)
 
     args = parser.parse_args()
 

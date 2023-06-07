@@ -9,6 +9,7 @@ venvs/
 slurm-*
 *.ipynb
 plots/*
+
 instance/*.txt
 *.pkl
 *.sh

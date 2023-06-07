@@ -37,8 +37,8 @@ def dataset(args):
                 cost_to_go = objective - sum_travel_times # cost to go from this state until the end, BEFORE taking the action
                 action = darp.action(k)
                 node = darp.action2node(action)
+                
                 if node not in state.successors(next_vehicle_node):
-                    
                     raise ValueError('Error in graph creation: vehicle cannot perform best action.')
                 
 

@@ -57,11 +57,13 @@ def supervision(args):
     device = get_device(cuda_available)
 
     num_nodes = 2*train_N + train_K + 2
+    num_edge_feat = 5 if args.arc_elimination else 3 # include feasibility as feature when doing arc elimination
+    
     model = GraphTransformerNet(
         device=device,
         num_nodes=num_nodes,
         num_node_feat=17,
-        num_edge_feat=3,
+        num_edge_feat=num_edge_feat,
         d_model=args.d_model,
         num_layers=args.num_layers,
         num_heads=args.num_heads,
@@ -208,6 +210,7 @@ def supervision(args):
     print("Total execution time: {:.4f} seconds.\n".format(np.sum(exec_times)))
 
     #fig, ax = plt.subplots()
+
     file_name = 'accuracy-' + name + '-' + str(args.wait_time) + '-' + str(args.filename_index)
     #ax.plot(np.arange(epochs), train_policy_performance, label="Training accuracy")
     #ax.plot(np.arange(epochs), valid_policy_performance, label="Validation accuracy")

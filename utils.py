@@ -96,7 +96,11 @@ def waiting_users(darp):
     """
     return sum([u.alpha==0 for u in darp.users])
     
-def is_edge(darp, u, k_u, t_u, u_next, v, k_v, t_v, v_next):
+def is_edge(darp, i_u, u, k_u, t_u, u_next, i_v, v, k_v, t_v, v_next):
+    if i_u == i_v:
+        return False
+    if not (darp.is_arc_feasible(i_u, i_v) or darp.is_arc_feasible(i_v, i_u)):
+        return False
     if (u and u.alpha == 2 and not k_u) or (v and v.alpha == 2 and not k_v): # already visited user
         return False
     if (t_u == 'pickup' and u.alpha == 1 and not k_u) or (t_v == 'pickup' and v.alpha == 1 and not k_v): # already visited pickups

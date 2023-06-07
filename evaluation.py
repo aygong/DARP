@@ -17,8 +17,8 @@ def evaluation(args, model=None):
     device = get_device(cuda_available)
 
     darp = Darp(args, mode='evaluate', device=device)
-
     num_nodes = 2*darp.train_N + darp.train_K + 2
+    num_edge_feat = 5 if args.arc_elimination else 3 # include feasibility as feature when doing arc elimination
 
     if model == None:
 
@@ -26,7 +26,7 @@ def evaluation(args, model=None):
             device=device,
             num_nodes=num_nodes,
             num_node_feat=17,
-            num_edge_feat=3,
+            num_edge_feat=num_edge_feat,
             d_model=args.d_model,
             num_layers=args.num_layers,
             num_heads=args.num_heads,
@@ -227,7 +227,7 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
         indices = indices.flatten().tolist()
 
         for _, k in enumerate(indices):
-            if darp.vehicles[k].free_time == 1440:
+            if darp.vehicles[k].free_time >= 1440:
                 continue
             
             darp.beta(k)
@@ -235,7 +235,6 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
             action_node, probs = darp.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
             action = darp.node2action(action_node)
             darp.log_probs.append(torch.log(probs.squeeze(0)[action]))
-
             darp.evaluate_step(k, action)
 
     return darp.cost()

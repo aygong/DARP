@@ -16,6 +16,7 @@ python main.py \
     --num_sl_subsets 100 \
     --num_sl_instances 100 \
     --wait_time 7 \
+    --arc_elimination 1\
     --supervision 1 \
     --batch_size 256 \
     --epochs 15 \
