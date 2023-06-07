@@ -436,7 +436,7 @@ class Darp:
         Construct a graph of the situation
         Nodes: 
         - 2 per user (pickup + dropoff)
-        - 1 source station per vehicle 
+        - K source stations (1 per vehicle) 
         - 1 destination station
         - 1 for the waiting action
         - total = 2N+K+2.
@@ -451,7 +451,7 @@ class Darp:
         n_nodes = 2*N + K + 2
         n_features = 17
         node_features = torch.zeros(n_nodes, n_features) # input features of each node
-        node_info = [] # node info to draw edges: node number, user (if any), vehicle (if any), type (pickup, dropoff, wait, source, destination), is_next_available (true or false), coords
+        node_info = [] # node info to draw edges: node number, user (if any), vehicle (if any), type (pickup, dropoff, wait, source, destination), is_next_available (True or False), coords
         next_vehicle_node = -1 # node conatining the vehicle that will perform an action
 
         for u in self.users:
@@ -475,7 +475,7 @@ class Darp:
                     node_features[u.id, 16] = 1                     # is next available
                     next_vehicle_node = u.id
             
-            if (u.alpha == 0 or k_pres):
+            if (u.alpha == 0 or k_pres): # if not already visited
                 node_info.append((u.id, u, k_pres, 'pickup', (k_pres and k_pres.id==k), u.pickup_coords))
 
             # dropoff node
@@ -498,9 +498,9 @@ class Darp:
                     node_features[u.id+N, 16] = 1                     # is next available
                     next_vehicle_node = u.id+N
 
-            if (u.alpha <= 1 or k_pres):
+            if (u.alpha <= 1 or k_pres): # if not already visited
                 node_info.append((u.id+N, u, k_pres, 'dropoff', (k_pres and k_pres.id==k), u.dropoff_coords))
-        
+
         # Destination node
         node_features[2*N + 1, one_hot_node_type('destination')] = 1
         node_info.append((2*N+1, None, None, 'destination', False, [0.0, 0.0]))
@@ -524,8 +524,10 @@ class Darp:
                 if k == k_v.id:
                     node_features[2*N + 2 + k_v.id, 16] = 1
                     next_vehicle_node = 2*N + 2 + k_v.id
-            if v_pres != None:
+            
+            if v_pres != None: # if not already visited
                 node_info.append((2*N+2+k_v.id, None, v_pres, 'source', k_v.id == k, [0.0, 0.0]))
+        
         # Create a DGL Graph
         g = dgl.DGLGraph()
         g.add_nodes(n_nodes)
@@ -541,6 +543,7 @@ class Darp:
                 if is_edge(self, i_u, u, k_u, t_u, u_next, i_v, v, k_v, t_v, v_next):
                     pairing = 1 if (u and u==v) else 0
                     waiting = 1 if (t_u=='wait' or t_v=='wait') else 0
+
                     feasible = int(self.is_arc_feasible(i_u, i_v))
                     reverse_feasible = int(self.is_arc_feasible(i_u, i_v))
                     #edge_feat = torch.tensor([euclidean_distance(u_coords, v_coords), pairing, waiting])
@@ -553,8 +556,13 @@ class Darp:
                     else:
                         edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting])
 
+
         g.add_edges(edges['src'], edges['dst'], data={'feat':torch.tensor(edges['feat'])})
         #g = dgl.add_reverse_edges(g, copy_ndata=True, copy_edata=True)
+
+        if self.args.pe_dim:
+            transform = dgl.LaplacianPE(k=self.args.pe_dim, feat_name='PE')
+            g = transform(g)
 
         if next_vehicle_node == -1:
             raise ValueError('No node found for next vehicle')
@@ -712,14 +720,23 @@ class Darp:
         batch_x = graph.ndata['feat'].to(self.device)
         batch_e = graph.edata['feat'].to(self.device)
 
+        batch_lap_pe = graph.ndata['PE'].to(self.device)
+        # sign flips
+        sign_flip = torch.rand(batch_lap_pe.size(1)).to(self.device)
+        sign_flip[sign_flip>=0.5] = 1.0; sign_flip[sign_flip<0.5] = -1.0
+        batch_lap_pe = batch_lap_pe * sign_flip.unsqueeze(0)
+
+        num_nodes = 2*self.train_N + self.train_K + 2
+
         if self.mode == 'evaluate':
             #pred_mask = [0 if self.users[i].beta == 2 else 1 for i in range(0, self.test_N)] + \
             #            [0 for _ in range(0, self.train_N - self.test_N)] + [1, 1]
             #pred_mask = torch.Tensor(pred_mask).to(self.device)
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, self.num_nodes, masking=True)
+            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, self.num_nodes, h_lap_pe=batch_lap_pe, masking=True)
             #policy_outputs = policy_outputs.masked_fill(pred_mask == 0, -1e6)
         else:
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, self.num_nodes, masking=True)
+            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, self.num_nodes, h_lap_pe=batch_lap_pe, masking=True)
+
         probs = f.softmax(policy_outputs, dim=1)
         _, action_node = torch.max(probs, 1)
 

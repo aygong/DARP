@@ -21,7 +21,7 @@ def evaluation(args, model=None):
     num_edge_feat = 5 if args.arc_elimination else 3 # include feasibility as feature when doing arc elimination
 
     if model == None:
-    
+
         darp.model = GraphTransformerNet(
             device=device,
             num_nodes=num_nodes,
@@ -45,7 +45,7 @@ def evaluation(args, model=None):
             model = "sl"
             print("Load the model trained by supervised learning.\n")
 
-        checkpoint = torch.load('./model/' + model + '-' + model_name + '.model')
+        checkpoint = torch.load('./model/' + model + '-' + model_name + '.model', map_location=device)
         darp.model.load_state_dict(checkpoint['model_state_dict'])
     else:
         darp.model=model
