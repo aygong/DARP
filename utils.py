@@ -97,6 +97,10 @@ def waiting_users(darp):
     return sum([u.alpha==0 for u in darp.users])
     
 def is_edge(darp, i_u, u, k_u, t_u, u_next, i_v, v, k_v, t_v, v_next):
+    """
+    For state graph computation.
+    Returns True if an edge should be drawn between the two node, False otherwise.
+    """
     if i_u == i_v:
         return False
     if not (darp.is_arc_feasible(i_u, i_v) or darp.is_arc_feasible(i_v, i_u)):
@@ -179,9 +183,11 @@ def is_edge(darp, i_u, u, k_u, t_u, u_next, i_v, v, k_v, t_v, v_next):
             
     raise RuntimeError('End of is_edge function without returning') # Should not happen but sanity check
 
-# form a mini batch from a given list of samples = [(graph, vehicle_id, action, value) pairs]
 def collate(samples):
-    # The input samples is a list of pairs (graph, vehicle_id, action, value).
+    """
+    Form a mini batch from a given list of samples.
+    The input samples is a list of pairs (graph, vehicle_id, action, value).
+    """
     graphs, ks, actions, values = map(list, zip(*samples))
     ks = torch.tensor(ks).long()
     actions = torch.tensor(actions).long()
@@ -191,6 +197,7 @@ def collate(samples):
     return batched_graph, ks, actions, values
 
 def shuffle_list(*ls):
+    """ Shuffles all the given lists with the same random permuation"""
     l =list(zip(*ls))
 
     random.shuffle(l)

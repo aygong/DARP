@@ -101,7 +101,7 @@ class Darp:
             self.train_N = N
             self.train_K = K
             # Get the node-user mapping dictionary of test instances
-            self.node2user = node_to_user(N) # was test_N before
+            self.node2user = node_to_user(N) 
             # Set the name of test instances
             self.test_name = self.test_type + str(self.test_K) + '-' + str(self.test_N)
             # Set the path of test instances
@@ -148,7 +148,6 @@ class Darp:
             user.served = self.train_K
             self.users.append(user)
         # Add dummy users if necessary
-        #for _ in range(0, self.train_N - N):
         for i in range(N+1, self.train_N+1):
             user = User(mode=self.mode)
             user.id = i
@@ -384,8 +383,6 @@ class Darp:
 
 
     def beta(self, k):
-        #_, N, _, _, _ = self.parameter()
-
         for i in range(0, self.train_N):
             user = self.users[i]
             if user.alpha == 1 and user.served == self.vehicles[k].id:
@@ -402,29 +399,9 @@ class Darp:
                 else:
                     # 2: the user has been served
                     user.beta = 2
-
-    def state(self, k, time):
-        state = [list(map(np.float32,
-                          [user.pickup_coords,
-                           user.dropoff_coords,
-                           shift_window(user.pickup_window, time),
-                           shift_window(user.dropoff_window, time),
-                           user.ride_time,
-                           user.alpha,
-                           user.beta,
-                           user.served,
-                           self.vehicles[k].id]
-                          + [vehicle.serve_duration + euclidean_distance(
-                              vehicle.coords, user.pickup_coords)
-                             if user.alpha == 0 else
-                             vehicle.serve_duration + euclidean_distance(
-                                 vehicle.coords, user.dropoff_coords)
-                             for vehicle in self.vehicles]))
-                 for user in self.users]
-
-        return state
     
     def vehicle_present(self, u_coords):
+        """Find whether a vehicle is present on u_coords, and return it."""
         for k in self.vehicles:
             if k.coords == u_coords:
                 # Must verify that there is not twice the same coordinates for two different users
@@ -541,25 +518,25 @@ class Darp:
         for (i_u, u, k_u, t_u, u_next, u_coords) in node_info:
             for (i_v, v, k_v, t_v, v_next, v_coords) in node_info:
                 if is_edge(self, i_u, u, k_u, t_u, u_next, i_v, v, k_v, t_v, v_next):
+                    # Compute edge features
                     pairing = 1 if (u and u==v) else 0
                     waiting = 1 if (t_u=='wait' or t_v=='wait') else 0
 
                     feasible = int(self.is_arc_feasible(i_u, i_v))
                     reverse_feasible = int(self.is_arc_feasible(i_u, i_v))
-                    #edge_feat = torch.tensor([euclidean_distance(u_coords, v_coords), pairing, waiting])
-                    #g.add_edges(i_u, i_v, data={'feat':edge_feat})
+                    
+                    # Add to edge list
                     edges['src'].append(i_u)
                     edges['dst'].append(i_v)
-                    #edges['feat'].append(edge_feat)
                     if self.args.arc_elimination:
                         edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting, feasible, reverse_feasible])
                     else:
                         edges['feat'].append([euclidean_distance(u_coords, v_coords), pairing, waiting])
 
-
+        # Add edges in the graph
         g.add_edges(edges['src'], edges['dst'], data={'feat':torch.tensor(edges['feat'])})
-        #g = dgl.add_reverse_edges(g, copy_ndata=True, copy_edata=True)
 
+        # Add laplacian positional encoding information
         if self.args.pe_dim:
             transform = dgl.LaplacianPE(k=self.args.pe_dim, feat_name='PE')
             g = transform(g)
@@ -573,7 +550,7 @@ class Darp:
         given an action, returns the corresponding node in the sate graph
         """
         if action < self.train_N: # user
-            if self.users[action].alpha == 0:# and not self.vehicle_present(self.users[action].pickup_coords):
+            if self.users[action].alpha == 0:
                 return action+1 # pickup
             else:
                 return (action+1) + self.train_N # dropoff
@@ -600,6 +577,7 @@ class Darp:
     
     # noinspection PyMethodMayBeStatic
     def will_pick_up(self, vehicle, user):
+        """ Called when a vehicle arrives at a pickup location """
         travel_time = euclidean_distance(vehicle.coords, user.pickup_coords)
         window_start = user.pickup_window[0]
         vehicle.coords = user.pickup_coords
@@ -610,6 +588,7 @@ class Darp:
         return travel_time, window_start
 
     def will_drop_off(self, vehicle, user):
+        """ Called when a vehicle arrives at a dropoff location """
         travel_time = euclidean_distance(vehicle.coords, user.dropoff_coords)
         window_start = user.dropoff_window[0]
         vehicle.coords = user.dropoff_coords
@@ -620,6 +599,7 @@ class Darp:
         return travel_time, window_start
 
     def action(self, k):
+        """ Computes action taken by the expert policy """
         vehicle = self.vehicles[k]
         r = vehicle.ordinal
         node = vehicle.route[r]
@@ -641,6 +621,7 @@ class Darp:
     def supervise_step(self, k):
         """
         Simulate a step of the instance to reach the next state.
+        Action taken by the expert, dataset creation time.
         Return the travel time of the transition.
         """
 
@@ -714,7 +695,6 @@ class Darp:
         return travel_time
 
     def predict(self, graph, vehicle_node_id, user_mask=None, src_mask=None):
-        #graph, ks, _, _ = DataLoader([graph, vehicle_node_id, 0, 0], batch_size=1, collate_fn=collate)  # noqa
         graph = graph.to(self.device)
         ks = torch.tensor([vehicle_node_id], device=self.device)
         batch_x = graph.ndata['feat'].to(self.device)
@@ -726,16 +706,7 @@ class Darp:
         sign_flip[sign_flip>=0.5] = 1.0; sign_flip[sign_flip<0.5] = -1.0
         batch_lap_pe = batch_lap_pe * sign_flip.unsqueeze(0)
 
-        num_nodes = 2*self.train_N + self.train_K + 2
-
-        if self.mode == 'evaluate':
-            #pred_mask = [0 if self.users[i].beta == 2 else 1 for i in range(0, self.test_N)] + \
-            #            [0 for _ in range(0, self.train_N - self.test_N)] + [1, 1]
-            #pred_mask = torch.Tensor(pred_mask).to(self.device)
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, self.num_nodes, h_lap_pe=batch_lap_pe, masking=True)
-            #policy_outputs = policy_outputs.masked_fill(pred_mask == 0, -1e6)
-        else:
-            policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, self.num_nodes, h_lap_pe=batch_lap_pe, masking=True)
+        policy_outputs, value_outputs = self.model(graph, batch_x, batch_e, ks, self.num_nodes, h_lap_pe=batch_lap_pe, masking=True)
 
         probs = f.softmax(policy_outputs, dim=1)
         _, action_node = torch.max(probs, 1)
@@ -744,6 +715,11 @@ class Darp:
         return action_node.item(), probs
 
     def evaluate_step(self, k, action):
+        """
+        Simulate a step of the instance to reach the next state.
+        Action taken by the model, at test time.
+        Return the travel time of the transition.
+        """
         K, N, T, Q, L = self.parameter()
         vehicle = self.vehicles[k]
 
@@ -827,6 +803,7 @@ class Darp:
         return travel_time, constraint_penalty
 
     def finish(self):
+        """ Returns True if the DARP is not done, False if the episode is over. """
         free_times = np.array([vehicle.free_time for vehicle in self.vehicles])
         num_finish = np.sum(free_times >= 1440)
 

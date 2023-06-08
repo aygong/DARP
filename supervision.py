@@ -18,6 +18,9 @@ from graph_transformer import GraphTransformerNet
 
 
 def supervision(args):
+    """ Train the model on expert episodes via supervised learning"""
+    
+    ### LOAD DATASET ###    
     train_type, train_K, train_N, train_T, train_Q, train_L = load_instance(args.train_index, 'train')
     name = train_type + str(train_K) + '-' + str(train_N)
     path_dataset = ['./dataset/' + file for file in os.listdir('./dataset') if file.startswith('dataset-' + name)]
@@ -37,6 +40,7 @@ def supervision(args):
     torch.manual_seed(0)
     random.seed(0)
 
+    ### CREATE TRAIN AND VALIDATION SETS ###
     indices = list(range(data_size))
     split = int(np.floor(0.02 * data_size))
     train_indices, valid_indices = indices[split:], indices[:split]
@@ -59,6 +63,7 @@ def supervision(args):
     num_nodes = 2*train_N + train_K + 2
     num_edge_feat = 5 if args.arc_elimination else 3 # include feasibility as feature when doing arc elimination
     
+    # Create model
     model = GraphTransformerNet(
         device=device,
         num_nodes=num_nodes,
@@ -78,8 +83,9 @@ def supervision(args):
     if cuda_available:
         model.cuda()
 
+    # Training setup
     criterion_policy = nn.CrossEntropyLoss()
-    criterion_value = nn.MSELoss()
+    #criterion_value = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
@@ -209,22 +215,7 @@ def supervision(args):
     print('Average execution time per epoch: {:.4f} seconds.'.format(np.mean(exec_times)))
     print("Total execution time: {:.4f} seconds.\n".format(np.sum(exec_times)))
 
-    #fig, ax = plt.subplots()
-
     file_name = 'accuracy-' + name + '-' + str(args.wait_time) + '-' + str(args.filename_index)
-    #ax.plot(np.arange(epochs), train_policy_performance, label="Training accuracy")
-    #ax.plot(np.arange(epochs), valid_policy_performance, label="Validation accuracy")
-    #ax.set_xlabel('Epoch')
-    #ax.set(ylim=(0, 1))
-    #ax.legend()
-    #ax.set_ylabel('Accuracy')
-    #plt.savefig(path_result + file_name + '.pdf')
-
-    #with open(path_result + file_name + '.npy', 'wb') as file:
-    #    np.save(file, train_policy_performance)  # noqa
-    #    np.save(file, train_value_performance)  # noqa
-    #    np.save(file, valid_policy_performance)  # noqa
-    #    np.save(file, valid_value_performance)  # noqa
 
     np.savez(
         path_result + file_name + '.npz',

@@ -28,6 +28,7 @@ def plot_SL_results(path_plot, path_result, filename, until_epoch=None):
     plt.tight_layout()
     plt.savefig(path_plot + filename + '.svg')
 
+
 def compare_accuracy(path_plot, path_result, file_list, title, plot_filename, labels=None, until_epoch=None):
     """
     Show all the accuracies of the file in file_list on the same plot for comparison.

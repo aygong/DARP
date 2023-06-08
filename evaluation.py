@@ -8,8 +8,6 @@ from collections import deque
 import copy
 
 from graph_transformer import GraphTransformerNet
-import multiprocessing
-import concurrent.futures
 
 def evaluation(args, model=None):
     # Determine if your system supports CUDA
@@ -51,7 +49,6 @@ def evaluation(args, model=None):
         darp.model=model
 
     darp.model.eval()
-    #torch.no_grad()
 
     if cuda_available:
         darp.model.cuda()
@@ -69,11 +66,8 @@ def evaluation(args, model=None):
     eval_not_done = []
     eval_rela_diff = []
 
-    # Set 'user_mask' and 'src_mask'
-    # user_mask = [1 for _ in range(9)] + \
-    #             [1 for _ in range(darp.test_K)] + [0 for _ in range(darp.train_K - darp.test_K)]
+    # Set 'src_mask'
     src_mask = [1 for _ in range(darp.test_N)] + [0 for _ in range(darp.train_N - darp.test_N)]
-    # user_mask = torch.Tensor(user_mask).to(device)
     src_mask = torch.Tensor(src_mask).to(device)
 
     for num_instance in range(args.num_tt_instances):
@@ -221,6 +215,7 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
     # Run the simulator
     darp.log_probs = []
     while darp.finish():
+        # Select next available vehicle
         free_times = [vehicle.free_time for vehicle in darp.vehicles]
         time = np.min(free_times)
         indices = np.argwhere(free_times == time)
@@ -230,12 +225,12 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
             if darp.vehicles[k].free_time >= 1440:
                 continue
             
-            darp.beta(k)
-            state, next_vehicle_node = darp.state_graph(k, time)
-            action_node, probs = darp.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
-            action = darp.node2action(action_node)
+            darp.beta(k) # Update beta
+            state, next_vehicle_node = darp.state_graph(k, time) # Compute state
+            action_node, probs = darp.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask) # Predict action
+            action = darp.node2action(action_node) # Corresponding node
             darp.log_probs.append(torch.log(probs.squeeze(0)[action]))
-            darp.evaluate_step(k, action)
+            darp.evaluate_step(k, action) # Simulat one step of MDP
 
     return darp.cost()
 
@@ -272,7 +267,6 @@ def beam_search(darp, num_instance, src_mask, beam_width):
     a2-16 greedy takes ~10s while beam search with beam_width=10 takes ~1000s.
     """
     # TODO: transpositions are possible, they need to be detected and removed from the beam
-    #darp.load_from_file(num_instance)
     k_best = [(darp, False, 0.0, 0)]  # (darp, finish, sumlogprob, n_broken_constraints)
     # Run the simulator
     while sum([done for (env, done, score, n_broken) in k_best]) < beam_width:
@@ -327,122 +321,11 @@ def beam_search(darp, num_instance, src_mask, beam_width):
             env.evaluate_step(k, action)
             n_broken_constraints = len(env.break_window) + len(env.break_ride_time) + 2*len(env.break_same) + 2*len(env.break_done)
             k_best.append((env, not env.finish(), score, n_broken_constraints))
-        #print('len kbest: ', len(k_best))
     return k_best
 
 
 def beam_choose(darps):
-    #idx = np.argmin([darp[0].time_penalty for darp in darps])
-    #darp = darps[idx]
     best_darp = sorted(darps, key=lambda x: (x[3], x[0].cost()))[0]
     return best_darp[0], best_darp[0].cost()
 
 
-#### What follows does not work ####
-def expand_env(arguments):
-        env, done, score, n_broken, beam_width, src_mask = arguments
-        print(f'In expand env, score: {score}')
-        if done:
-            return [], {}
-        
-        k_best_new = []
-        envs = {}
-        i = 0
-
-        waiting = True
-        waited_too_much = False
-        wait_count_per_vehicle = np.zeros(len(env.vehicles))
-        while waiting:
-            print('inside waiting loop')
-            free_times = [vehicle.free_time for vehicle in env.vehicles]
-            time = np.min(free_times)
-            indices = np.argwhere(free_times == time)
-            indices = indices.flatten().tolist()
-
-            k = indices[0]
-            if env.vehicles[k].free_time == 1440:
-                if sum(wait_count_per_vehicle) > 0:
-                    waited_too_much = True
-                    break
-                else:
-                    raise RuntimeError(f'Environment should be done if next free time is 1440, free_times: {free_times}, wait_count: {wait_count_per_vehicle}')
-            print('vehicle found')
-            env.beta(k)
-            print('beta found')
-            state, next_vehicle_node = env.state_graph(k, time)
-            print(f'state found, state: {state}, next_vehicle_node: {next_vehicle_node}')
-            action_node, probs = env.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask)
-            print('action node found')
-            action = env.node2action(action_node)
-            print('action found')
-            if action == env.train_N + 1: # Waiting action
-                print(': wait')
-                if wait_count_per_vehicle[k] == 0:
-                    # Save other actions to keep possibility of not waiting
-                    add_candidates(envs, env, state, k_best_new, beam_width, probs, k, next_vehicle_node, i, score, n_broken)
-                    i += 1
-                env.evaluate_step(k, action)
-                wait_count_per_vehicle[k] += 1
-            else:
-                waiting = False
-        if not waited_too_much:
-            add_candidates(envs, env, state, k_best_new, beam_width, probs, k, next_vehicle_node, i, score, n_broken)
-            i += 1
-
-        return k_best_new, envs
-
-def beam_search_parallelized(darp, num_instance, src_mask, beam_width):
-    """
-    Parallel version of the beam search algorithm for the DARP problem. Maintain 
-    the best beam_width solutions at each time step and expand them to the next time step.
-    """
-    
-    # TODO: transpositions are possible, they need to be detected and removed from the beam
-    #darp.load_from_file(num_instance)
-    k_best = [(darp, False, 0.0, 0)]  # (darp, finish, sumlogprob, n_broken_constraints)
-    # Run the simulator
-    while sum([done for (env, done, score, n_broken) in k_best]) < beam_width:
-        #print('dones: ', [done for (env, done, score, n_broken) in k_best])
-        k_best_new = []
-        envs = {}
-        i = 0
-            
-        print([x + (beam_width, src_mask) for x in k_best])
-
-        """with concurrent.futures.ProcessPoolExecutor() as executor:
-            index_shift = 0
-            for k_best_new_i, envs_i in executor.map(expand_env, (x + (beam_width, src_mask) for x in k_best)):
-                for candidate in k_best_new_i:
-                    # shift index of environment for this process
-                    k_best_new.append(candidate[0] + index_shift, candidate[1], candidate[2], candidate[3], candidate[4])
-                for key,value in envs_i.items():
-                    envs[key+index_shift] = value # shift index of environment for this process
-                index_shift += len(envs_i)"""
-
-        with multiprocessing.Pool() as pool:
-            results = pool.map(expand_env, (x + (beam_width, src_mask) for x in k_best))
-            print('Results got.')
-    
-        index_shift = 0
-        for k_best_new_i, envs_i in results:
-            for candidate in k_best_new_i:
-                # shift index of environment for this process
-                k_best_new.append(candidate[0] + index_shift, candidate[1], candidate[2], candidate[3], candidate[4])
-            for key,value in envs_i.items():
-                envs[key+index_shift] = value # shift index of environment for this process
-            index_shift += len(envs_i)
-
-
-
-        # order by score, select k best
-        k_best_new = sorted(k_best_new, key=lambda x: (x[4], x[1]))[:beam_width]
-
-        # step the env in potential envs
-        k_best = []
-        for (i, score, k, action, _) in k_best_new:
-            env = copy.deepcopy(envs[i])
-            env.evaluate_step(k, action)
-            n_broken_constraints = len(env.break_window) + len(env.break_ride_time) + 2*len(env.break_same) + 2*len(env.break_done)
-            k_best.append((env, not env.finish(), score, n_broken_constraints))
-        #print('len kbest: ', len(k_best))
-    return k_best
