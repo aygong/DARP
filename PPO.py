@@ -72,14 +72,20 @@ class PPO:
 
         # Darp setup
         self.darp = Darp(args, mode='reinforce', device=device)
+        self.num_nodes = 2*self.darp.train_N + self.darp.train_K + 2
+        num_edge_feat = 3
+
         self.darp.model = GraphTransformerNet(
             device=device,
-            num_nodes=2*self.darp.train_N + self.darp.train_K + 2,
+            num_nodes=self.num_nodes,
             num_node_feat=17,
-            num_edge_feat=3,
-            d_model=128,
-            num_layers=4,
-            num_heads=8,
+            num_edge_feat=num_edge_feat,
+            d_model=args.d_model,
+            num_layers=args.num_layers,
+            num_heads=args.num_heads,
+            d_k=args.d_k,
+            d_v=args.d_v,
+            d_ff=args.d_ff,
             dropout=0.1
         )
         
@@ -89,6 +95,7 @@ class PPO:
         self.darp.model.to(device)
         self.model = self.darp.model
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.criterion_value = torch.nn.MSELoss()
 
     def greedy_action(self, graph, vehicle_node_id):
@@ -115,9 +122,14 @@ class PPO:
         k = torch.tensor([vehicle_node_id], device=self.device)
         x = graph.ndata['feat'].to(self.device)
         e = graph.edata['feat'].to(self.device)
+        lap_pe = graph.ndata['PE'].to(self.device)
+        # sign flips
+        sign_flip = torch.rand(lap_pe.size(1)).to(self.device)
+        sign_flip[sign_flip>=0.5] = 1.0; sign_flip[sign_flip<0.5] = -1.0
+        lap_pe = lap_pe * sign_flip.unsqueeze(0)
 
         with torch.no_grad():
-            policy, value = self.model(graph, x, e, k, masking=True)
+            policy, value = self.model(graph, x, e, k, self.num_nodes, h_lap_pe=lap_pe, masking=True)
             probs = f.softmax(policy, dim=1)
             cat = Categorical(probs=probs)
 
@@ -134,8 +146,13 @@ class PPO:
         
         batch_x = batched_graph.ndata['feat'].to(self.device)
         batch_e = batched_graph.edata['feat'].to(self.device)
+        batch_lap_pe = batched_graph.ndata['PE'].to(self.device)
+        # sign flips
+        sign_flip = torch.rand(batch_lap_pe.size(1)).to(self.device)
+        sign_flip[sign_flip>=0.5] = 1.0; sign_flip[sign_flip<0.5] = -1.0
+        batch_lap_pe = batch_lap_pe * sign_flip.unsqueeze(0)
 
-        policy_outputs, value_outputs = self.model(batched_graph, batch_x, batch_e, vehicle_node_ids, masking=True)
+        policy_outputs, value_outputs = self.model(batched_graph, batch_x, batch_e, vehicle_node_ids, self.num_nodes, h_lap_pe=batch_lap_pe, masking=True)
         probs = f.softmax(policy_outputs, dim=1)
         cat = Categorical(probs=probs)
 

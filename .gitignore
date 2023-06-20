@@ -1,6 +1,4 @@
 # Specific to project
-instance/*-train.txt
-instance/*-test.txt
 dataset/*.pt
 result/
 model/
@@ -10,6 +8,8 @@ slurm-*
 *.ipynb
 plots/*
 *.pkl
+*.sh
+instance/*.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

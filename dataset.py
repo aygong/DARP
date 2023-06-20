@@ -27,7 +27,7 @@ def dataset(args):
             indices = np.argwhere(free_times == min_time)
             indices = indices.flatten().tolist()
             for _, k in enumerate(indices):
-                if darp.vehicles[k].free_time == 1440:
+                if darp.vehicles[k].free_time >= 1440:
                     continue
 
                 darp.beta(k)

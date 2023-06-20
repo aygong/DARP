@@ -69,25 +69,31 @@ def supervision(args):
         d_ff=args.d_ff,
         dropout=args.dropout)"""
     
+    num_nodes = 2*train_N + train_K + 2
+    num_edge_feat = 3 
+    
     model = GraphTransformerNet(
         device=device,
-        num_nodes=2*train_N + train_K + 2,
+        num_nodes=num_nodes,
         num_node_feat=17,
-        num_edge_feat=3,
-        d_model=128,
-        num_layers=4,
-        num_heads=8,
+        num_edge_feat=num_edge_feat,
+        d_model=args.d_model,
+        num_layers=args.num_layers,
+        num_heads=args.num_heads,
+        d_k=args.d_k,
+        d_v=args.d_v,
+        d_ff=args.d_ff,
         dropout=0.1
     )
 
-    model_name = name + '-' + str(args.wait_time)
+    model_name = name + '-' + str(args.wait_time) +'-'+ str(args.filename_index)
 
     if cuda_available:
         model.cuda()
 
     criterion_policy = nn.CrossEntropyLoss()
     criterion_value = nn.MSELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
 
     epochs = args.epochs
@@ -118,8 +124,16 @@ def supervision(args):
             batch_x = graphs.ndata['feat'].to(device)
             batch_e = graphs.edata['feat'].to(device)
 
+                        # Laplacian positional encoding
+            batch_lap_pe = graphs.ndata['PE'].to(device)
+
             optimizer.zero_grad()
-            policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, masking=True)
+            # sign flips
+            sign_flip = torch.rand(batch_lap_pe.size(1)).to(device)
+            sign_flip[sign_flip>=0.5] = 1.0; sign_flip[sign_flip<0.5] = -1.0
+            batch_lap_pe = batch_lap_pe * sign_flip.unsqueeze(0)
+
+            policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, num_nodes, h_lap_pe=batch_lap_pe, masking=True)
             policy_loss = criterion_policy(policy_outputs, action_nodes)
             #print(value_outputs.size(), values.size())
             value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
@@ -169,7 +183,15 @@ def supervision(args):
                     batch_x = graphs.ndata['feat'].to(device)
                     batch_e = graphs.edata['feat'].to(device)
 
-                    policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, masking=True)
+                    # Laplacian positional encoding
+                    batch_lap_pe = graphs.ndata['PE'].to(device)
+                    
+                    # sign flips
+                    sign_flip = torch.rand(batch_lap_pe.size(1)).to(device)
+                    sign_flip[sign_flip>=0.5] = 1.0; sign_flip[sign_flip<0.5] = -1.0
+                    batch_lap_pe = batch_lap_pe * sign_flip.unsqueeze(0)
+
+                    policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, num_nodes, h_lap_pe=batch_lap_pe, masking=True)
                     policy_loss = criterion_policy(policy_outputs, action_nodes)
                     value_loss = criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
                     loss =  policy_loss + value_loss * args.loss_ratio
@@ -212,21 +234,7 @@ def supervision(args):
     print('Average execution time per epoch: {:.4f} seconds.'.format(np.mean(exec_times)))
     print("Total execution time: {:.4f} seconds.\n".format(np.sum(exec_times)))
 
-    #fig, ax = plt.subplots()
-    file_name = 'accuracy-' + name + '-' + str(args.wait_time)
-    #ax.plot(np.arange(epochs), train_policy_performance, label="Training accuracy")
-    #ax.plot(np.arange(epochs), valid_policy_performance, label="Validation accuracy")
-    #ax.set_xlabel('Epoch')
-    #ax.set(ylim=(0, 1))
-    #ax.legend()
-    #ax.set_ylabel('Accuracy')
-    #plt.savefig(path_result + file_name + '.pdf')
-
-    #with open(path_result + file_name + '.npy', 'wb') as file:
-    #    np.save(file, train_policy_performance)  # noqa
-    #    np.save(file, train_value_performance)  # noqa
-    #    np.save(file, valid_policy_performance)  # noqa
-    #    np.save(file, valid_value_performance)  # noqa
+    file_name = 'accuracy-' + name + '-' + str(args.wait_time) + '-' + str(args.filename_index)
 
     np.savez(
         path_result + file_name + '.npz',

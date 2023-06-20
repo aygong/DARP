@@ -12,8 +12,8 @@ def parse_arguments():
     # Arguments of dataset.py
     parser.add_argument('--dataset', type=int, default=0) # 0 for false, 1 for true
     parser.add_argument('--train_index', type=int, default=0)
-    parser.add_argument('--num_sl_subsets', type=int, default=10)
-    parser.add_argument('--num_sl_instances', type=int, default=100)
+    parser.add_argument('--num_sl_subsets', type=int, default=100)
+    parser.add_argument('--num_sl_instances', type=int, default=500)
     parser.add_argument('--wait_time', type=int, default=7)
 
     # Arguments of supervision.py
@@ -21,6 +21,7 @@ def parse_arguments():
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--epochs', type=int, default=3)
     parser.add_argument('--loss_ratio', type=int, default=1)
+    parser.add_argument('--lr', type=float, default=1e-3)
 
 
     # Arguments of reinforcement.py
@@ -35,13 +36,17 @@ def parse_arguments():
     parser.add_argument('--beam', type=int, default=0)
 
     # Arguments of transformer.py
-    parser.add_argument('--d_model', type=int, default=128)
-    parser.add_argument('--num_layers', type=int, default=4)
-    parser.add_argument('--num_heads', type=int, default=8)
+    parser.add_argument('--d_model', type=int, default=512)
+    parser.add_argument('--num_layers', type=int, default=8)
+    parser.add_argument('--num_heads', type=int, default=16)
     parser.add_argument('--d_k', type=int, default=64)
     parser.add_argument('--d_v', type=int, default=64)
-    parser.add_argument('--d_ff', type=int, default=2048)
+    parser.add_argument('--d_ff', type=int, default=1024)
     parser.add_argument('--dropout', type=float, default=0.1)
+    parser.add_argument('--pe_dim', type=int, default=10) # laplacian positional encoding, 0 for no positional encoding
+
+    # Argument for saving
+    parser.add_argument('--filename_index', type=int, default=3)
 
     args = parser.parse_args()
 
@@ -70,10 +75,16 @@ def main():
         reinforce_PPO(args)
 
     if args.evaluation:
-        print("#########################################")
-        print("########## Evaluation started. ##########")
-        print("#########################################\n")
-        evaluation(args)
+        args.num_tt_instances = 100
+        test_indices = [0,1,2,3,4,5,6,7]
+
+        for i in test_indices:
+            args.test_index = i
+            print("#########################################")
+            print("########## Evaluation started. ##########")
+            print("#########################################\n")
+            evaluation(args, load_model_name=None)
+
 
 
 if __name__ == '__main__':

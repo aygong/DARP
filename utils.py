@@ -194,3 +194,15 @@ def shuffle_list(*ls):
 
     random.shuffle(l)
     return zip(*l)
+
+def load_my_state_dict(model, state_dict):
+ 
+        own_state = model.state_dict()
+        for name, param in state_dict.items():
+            if name not in own_state or name.startswith('MLP_value_layer'):
+                 # Do not copy value sub network as its number of parameters depends on the graph
+                 continue
+            if isinstance(param, torch.nn.parameter.Parameter):
+                # backwards compatibility for serialized parameters
+                param = param.data
+            own_state[name].copy_(param)
