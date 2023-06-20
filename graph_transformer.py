@@ -49,16 +49,16 @@ class GraphTransformerNet(nn.Module):
 
         self.embedding_e = nn.Linear(num_edge_feat, d_model)
         
-        self.node_encoder = NodeEncoder(
-            device,
-            input_seq_len=10,
-            d_model=d_model,
-            num_layers=2,
-            num_heads=num_heads,
-            d_k=d_k,
-            d_v=d_v,
-            d_ff=2*d_model,
-            dropout=dropout)
+        #self.node_encoder = NodeEncoder(
+        #    device,
+        #    input_seq_len=10,
+        #    d_model=d_model,
+        #    num_layers=2,
+        #    num_heads=num_heads,
+        #    d_k=d_k,
+        #    d_v=d_v,
+        #    d_ff=2*d_model,
+        #    dropout=dropout)
         
         if self.pe_dim >0:
             self.embedding_lap_pe = nn.Linear(pe_dim, d_model)
