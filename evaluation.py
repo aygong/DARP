@@ -1,11 +1,11 @@
 from environment import *
-from transformer import Transformer
 from utils import get_device
 
 import os
 import time as t
 from collections import deque
 import copy
+import torch
 
 from graph_transformer import GraphTransformerNet
 
@@ -36,6 +36,7 @@ def evaluation(args, model=None):
 
         # Load the trained model
         model_name = darp.train_name + '-' + str(args.wait_time) +'-'+ str(args.filename_index)
+
         if args.model_type:
             model = "rl"
             print("Load the model trained by reinforcement learning.\n")
@@ -110,7 +111,7 @@ def evaluation(args, model=None):
         eval_ride_time.append(len(set(darp.break_ride_time)))
         eval_not_same.append(len(darp.break_same))
         eval_not_done.append(len(darp.break_done))
-        eval_rela_diff.append(abs(true_cost - darp_cost) / true_cost * 100)
+        eval_rela_diff.append((darp_cost - true_cost) / true_cost * 100)
         eval_run_time.append(run_time)
         eval_time_penalty.append(darp.time_penalty)
 
@@ -136,31 +137,46 @@ def evaluation(args, model=None):
             }, file)
             file.write("\n")
 
-    # Print the metrics on one standard instance
+    os.makedirs(path_result, exist_ok=True)
+
+    standard_dict = {
+            'Cost (Rist 2021)': round(eval_rist_cost[0], 2),
+            'Cost (predicted)': round(eval_pred_cost[0], 2),
+            'Diff. (%)': round(eval_rela_diff[0], 2),
+            '# Time Window': eval_window[0],
+            '# Ride Time': eval_ride_time[0],
+            'Time penalty': round(eval_time_penalty[0], 2),
+            'Run time': round(eval_run_time[0], 2),
+        }
+    
+    average_dict = {
+            'Aver. Cost (Rist 2021)': round(sum(eval_rist_cost) / len(eval_rist_cost), 2),
+            'Aver. Cost (predicted)': round(sum(eval_pred_cost) / len(eval_pred_cost), 2),
+            'Aver. Diff. (%)': round(sum(eval_rela_diff) / len(eval_rela_diff), 2),
+            'Aver. # Time Window': round(sum(eval_window) / len(eval_window), 2),
+            'Aver. # Ride Time': round(sum(eval_ride_time) / len(eval_ride_time), 2),
+            'Aver. Time penalty': round(sum(eval_time_penalty) / len(eval_time_penalty), 2),
+            'Aver. Run time': round(sum(eval_run_time) / len(eval_run_time), 2),
+        }
+    
+    not_same = {
+            '# Not Same': int(np.sum(np.asarray(eval_not_same) > 0)),
+            '# Not Done': int(np.sum(np.asarray(eval_not_done) > 0)),
+        }
+    
+     # Print the metrics on one standard instance
     print('--------Metrics on one standard instance:--------')
-    print('Cost (Rist 2021): {:.2f}'.format(eval_rist_cost[0]))
-    print('Cost (predicted): {:.2f}'.format(eval_pred_cost[0]))
-    print('Diff. (%): {:.2f}'.format(eval_rela_diff[0]))
-    print('# Time Window: {}'.format(eval_window[0]))
-    print('# Ride Time: {}'.format(eval_ride_time[0]))
-    print('Time penalty: {:.2f}'.format(eval_time_penalty[0]))
-    print('Run time: {:.2f}\n'.format(eval_run_time[0]))
+    for k,v in standard_dict.items():
+        print(k,':',v)
 
     # Print the metrics on multiple random instances
     print('--------Average metrics on {} random instances:--------'.format(args.num_tt_instances))
-    print('Aver. Cost (Rist 2021): {:.2f}'.format(sum(eval_rist_cost) / len(eval_rist_cost)))
-    print('Aver. Cost (predicted): {:.2f}'.format(sum(eval_pred_cost) / len(eval_pred_cost)))
-    print('Aver. Diff. (%): {:.2f}'.format(sum(eval_rela_diff) / len(eval_rela_diff)))
-    print('Aver. # Time Window: {:.2f}'.format(sum(eval_window) / len(eval_window)))
-    print('Aver. # Ride Time: {:.2f}'.format(sum(eval_ride_time) / len(eval_ride_time)))
-    print('Aver. Time penalty: {:.2f}'.format(sum(eval_time_penalty) / len(eval_time_penalty)))
-    print('Aver. Run time: {:.2f}'.format(sum(eval_run_time) / len(eval_run_time)))
+    for k,v in average_dict.items():
+        print(k,':',v)
 
     # Print the number of problematic requests
-    print('# Not Same: {}'.format(np.sum(np.asarray(eval_not_same) > 0)))
-    print('# Not Done: {}'.format(np.sum(np.asarray(eval_not_done) > 0)))
-
-    os.makedirs(path_result, exist_ok=True)
+    for k,v in not_same.items():
+        print(k,':',v)
 
     with open(path_result + 'evaluation.txt', 'a+') as output:
         # Dump the parameters of training instances
@@ -180,34 +196,30 @@ def evaluation(args, model=None):
         output.write('\n')
 
         # Dump the metrics on one standard instance
-        json.dump({
-            'Cost (Rist 2021)': round(eval_rist_cost[0], 2),
-            'Cost (predicted)': round(eval_pred_cost[0], 2),
-            'Diff. (%)': round(eval_rela_diff[0], 2),
-            '# Time Window': eval_window[0],
-            '# Ride Time': eval_ride_time[0],
-            'Time penalty': round(eval_time_penalty[0], 2),
-            'Run time': round(eval_run_time[0], 2),
-        }, output)
+        json.dump(standard_dict, output)
         output.write('\n')
 
         # Dump the metrics on multiple random instances
-        json.dump({
-            'Aver. Cost (Rist 2021)': round(sum(eval_rist_cost) / len(eval_rist_cost), 2),
-            'Aver. Cost (predicted)': round(sum(eval_pred_cost) / len(eval_pred_cost), 2),
-            'Aver. Diff. (%)': round(sum(eval_rela_diff) / len(eval_rela_diff), 2),
-            'Aver. # Time Window': round(sum(eval_window) / len(eval_window), 2),
-            'Aver. # Ride Time': round(sum(eval_ride_time) / len(eval_ride_time), 2),
-            'Aver. Time penalty': round(sum(eval_time_penalty) / len(eval_time_penalty), 2),
-            'Aver. Run time': round(sum(eval_run_time) / len(eval_run_time), 2),
-        }, output)
+        json.dump(average_dict, output)
         output.write('\n')
 
         # Dump the number of problematic requests
-        json.dump({
-            '# Not Same': int(np.sum(np.asarray(eval_not_same) > 0)),
-            '# Not Done': int(np.sum(np.asarray(eval_not_done) > 0)),
-        }, output)
+        json.dump(not_same, output)
+        output.write('\n')
+    
+
+    with open(f'{path_result}{model_name}-{darp.test_K}-{darp.test_N}-evaluation.txt', 'w') as output:
+        
+        # Dump the metrics on one standard instance
+        json.dump(standard_dict, output)
+        output.write('\n')
+
+        # Dump the metrics on multiple random instances
+        json.dump(average_dict, output)
+        output.write('\n')
+
+        # Dump the number of problematic requests
+        json.dump(not_same, output)
         output.write('\n')
 
 
@@ -230,7 +242,7 @@ def greedy_evaluation(darp, num_instance, src_mask=None, logs=True):
             action_node, probs = darp.predict(state, next_vehicle_node, user_mask=None, src_mask=src_mask) # Predict action
             action = darp.node2action(action_node) # Corresponding node
             darp.log_probs.append(torch.log(probs.squeeze(0)[action]))
-            darp.evaluate_step(k, action) # Simulat one step of MDP
+            darp.evaluate_step(k, action) # Simulate one step of MDP
 
     return darp.cost()
 

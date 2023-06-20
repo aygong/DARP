@@ -1,5 +1,4 @@
 from utils import *
-from transformer import Transformer
 
 import numpy as np
 import os
@@ -17,7 +16,7 @@ import torch.nn.functional as f
 from graph_transformer import GraphTransformerNet
 
 
-def supervision(args):
+def supervision(args, model_load_name=None):
     """ Train the model on expert episodes via supervised learning"""
     
     ### LOAD DATASET ###    
@@ -77,7 +76,7 @@ def supervision(args):
         d_ff=args.d_ff,
         dropout=0.1
     )
-
+    
     model_name = name + '-' + str(args.wait_time) +'-'+ str(args.filename_index)
 
     if cuda_available:
@@ -88,6 +87,12 @@ def supervision(args):
     #criterion_value = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=50, factor=0.99)
+
+    if model_load_name:
+        checkpoint = torch.load('./model/' + model_load_name + '.model', map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
     epochs = args.epochs
     train_policy_performance = np.zeros(epochs)
@@ -172,7 +177,15 @@ def supervision(args):
                     batch_x = graphs.ndata['feat'].to(device)
                     batch_e = graphs.edata['feat'].to(device)
 
-                    policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, num_nodes, masking=True)
+                    # Laplacian positional encoding
+                    batch_lap_pe = graphs.ndata['PE'].to(device)
+                    
+                    # sign flips
+                    sign_flip = torch.rand(batch_lap_pe.size(1)).to(device)
+                    sign_flip[sign_flip>=0.5] = 1.0; sign_flip[sign_flip<0.5] = -1.0
+                    batch_lap_pe = batch_lap_pe * sign_flip.unsqueeze(0)
+
+                    policy_outputs, value_outputs = model(graphs, batch_x, batch_e, ks, num_nodes, h_lap_pe=batch_lap_pe, masking=True)
                     policy_loss = criterion_policy(policy_outputs, action_nodes)
                     value_loss = 0#criterion_value(value_outputs / values, torch.ones(values.size()).to(device))
                     loss =  policy_loss + value_loss * args.loss_ratio
