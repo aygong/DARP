@@ -11,19 +11,20 @@
 #SBATCH --chdir <path to directory>
 
 python main.py \
-    --dataset True \
+    --dataset 0 \
     --train_index 0\
     --num_sl_subsets 100 \
     --num_sl_instances 100 \
     --wait_time 7 \
-    --supervision True \
+    --arc_elimination 1\
+    --supervision 1 \
     --batch_size 256 \
     --epochs 15 \
-    --reinforcement True \
+    --reinforcement 0 \
     --num_rl_instances 300 \
-    --evaluation True \
+    --evaluation 1 \
     --num_tt_instances 100 \
-    --model_type False \
+    --model_type 0 \
     --test_index 0 \
     --beam 0 \
     --d_model 128 \
